@@ -523,7 +523,7 @@ int do_test(json& j) {
     map<string, string> extra;
     extra["stdin"] = path["stdin"] + "/" + cs + ".in";
     extra["stdout"] = path["stdout"] + "/" + cs + ".out";
-    extra["output"] = path["execout"] + "/" + cs + ".out";
+    extra["output"] = path["result"] + "/" + cs + ".execout";
     extra["diff"] = path["diff"] + "/" + cs + ".diff";
 
     if (debug) {
