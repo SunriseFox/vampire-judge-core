@@ -30,7 +30,7 @@ json result;
 
 map<string, string> path;
 
-enum RESULT {AC = 0, CE, RE, ME, TE, OLE, SLE, PE, SW};
+enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
 
 int create_folder(string& path) {
     const int error = system((string("mkdir -p ") + path).c_str ());
@@ -75,6 +75,8 @@ string getStatusText(RESULT what) {
       return "output limit exceed";
     case SLE:
       return "syscall not allowed";
+    case WA:
+      return "wrong answer";
     case PE:
       return "presentation error";
     case AC:
@@ -177,8 +179,8 @@ int comile_c_cpp(json& j, const string& compile_command) {
       status = WEXITSTATUS(status);
       if (debug)
         cout << "compiler return code is : " << status << endl;
+      result["compiler"] = readFile(path["cmpinfo"]);
       if(status != 0) {
-        result["compiler"] = readFile(path["cmpinfo"]);
         finish (CE);
       }
       return 0;
@@ -447,11 +449,50 @@ bool should_continue(json& j, RESULT r) {
 }
 
 RESULT do_compare(json& j, const map<string, string>& extra) {
-  return AC;
+  if (j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare"
+    || j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1) {
+    // should do spj
+    string spj_exec_path = 
+      j["spj_exec"].is_string() ? j["spj_exec"].get<string>() : path["spj"];
+    string spjcmd = spj_exec_path + " " + extra.at("stdin") + " " 
+      + extra.at("stdout") + " " + extra.at("execout") 
+      + " >" + extra.at("diff") + " 2>&1";
+    if (debug)
+      cout << "special judge command: " << spjcmd << endl;
+    int status = system(spjcmd.c_str());
+    if (debug)
+      cout << "special judge returned: " << status << endl;
+    if (WIFEXITED(status)) {
+      switch  (WEXITSTATUS(status)) {
+        case 0: return AC;
+        case 1: return PE;
+        case 2: return WA;
+        default: 
+          cerr << "[warn] special judge returned unknown status" << endl;
+          return SW;
+      }
+    }
+    cerr << "special judge program is signaled" << endl;
+    return SW; 
+  } else {
+    string difcmd = string("diff ") + extra.at("stdout") + " " + extra.at("execout") + " >" + extra.at("diff");
+    int status = system(difcmd.c_str());
+
+    if (WEXITSTATUS(status) == 0)
+      return AC;
+
+    string difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("stdout") + " " + extra.at("execout") + " >" + extra.at("diff");
+    status = system(difcmd.c_str());
+
+    if (WEXITSTATUS(status) == 0)
+      return PE;
+    return WA;
+  }
+  return SW;
 }
 
 int do_interactive_test(json& j) {
-  
+
 }
 
 int do_test(json& j) {
@@ -675,7 +716,8 @@ int main (int argc, char** argv) {
   chmod(path["exec"].c_str(), S_IRWXG|S_IRWXU);
 
   path["spj"] = path["base"] + "/judge/" + pid;
-
+  path["spjlog"] = path["temp"] + "result.spjinfo";
+  unlink(path["spjlog"].c_str());
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());

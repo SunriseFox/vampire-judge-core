@@ -6,6 +6,5 @@
   "on_error_continue": ["accepted", "presentation error"],
   "test_case_count": 10,
   "spj_mode": "no",
-  "spj_source": null,
-  "spj_lang": null
+  "spj_exec": null
 }

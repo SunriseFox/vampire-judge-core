@@ -9,7 +9,7 @@ test_case_count:
 user_source:
 user_lang: c / c++ / javascript / go / python / text
 spj_mode: no / compare / interactive
-spj_source: 
+spj_exec: 
 spj_lang:  c / c++ / javascript / go / python
 target_dir:
 
