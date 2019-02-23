@@ -4,7 +4,7 @@
   "max_memory": 100000,
   "max_output": 10000,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
-  "test_case_count": 10,
-  "spj_mode": "no",
+  "test_case_count": 5,
+  "spj_mode": "interactive",
   "spj_exec": null
 }

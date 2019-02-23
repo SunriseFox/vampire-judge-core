@@ -1,0 +1,17 @@
+{
+  "compiler": "",
+  "detail": [
+    {
+      "exitcode": 0,
+      "memory": 664,
+      "result": "system error",
+      "status": 9,
+      "time": 1
+    }
+  ],
+  "extra": null,
+  "memory": 664,
+  "result": "system error",
+  "status": 9,
+  "time": 1
+}

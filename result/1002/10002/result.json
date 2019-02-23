@@ -1,0 +1,24 @@
+{
+  "compiler": "",
+  "detail": [
+    {
+      "exitcode": 0,
+      "memory": 2940,
+      "result": "accepted",
+      "status": 0,
+      "time": 14
+    },
+    {
+      "exitcode": 0,
+      "memory": 2936,
+      "result": "accepted",
+      "status": 0,
+      "time": 21
+    }
+  ],
+  "extra": null,
+  "memory": 2940,
+  "result": "accepted",
+  "status": 0,
+  "time": 35
+}

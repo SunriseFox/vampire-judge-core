@@ -31,6 +31,8 @@ map<string, string> path;
 enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
 enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PATHON, LANG_GO, LANG_TEXT};
 
+int a_pid;
+
 int create_folder(string& path) {
     const int error = system((string("mkdir -p ") + path).c_str ());
     if (error != 0)
@@ -571,7 +573,13 @@ int do_test(json& j) {
     if (is_interactive) {
       // A is control process
       // B is slave process
-      int a_pid, b_pid;
+
+      if (debug) {
+        cout << "is interactive test" << endl;
+        cout << "log file: " << extra["diff"] << endl;
+      }
+
+      int b_pid;
       int lpipe[2], rpipe[2];
       pipe(lpipe);
       pipe(rpipe);
@@ -586,6 +594,8 @@ int do_test(json& j) {
         close(rpipe[0]);
         dup2(lpipe[1], STDOUT_FILENO);
         close(lpipe[1]);
+        close(rpipe[1]);
+        close(lpipe[0]);
 
         execlp(path.at("spj").c_str()
           , path.at("spj").c_str()
@@ -595,6 +605,7 @@ int do_test(json& j) {
           , nullptr
         );
 
+        cerr << "child process A exec failed" << endl;
         _exit(255);
       }
 
@@ -632,15 +643,14 @@ int do_test(json& j) {
 
         if (debug) {
           cout << "execution begin" << endl;
-          cout << "stdin:" << extra["stdin"] << endl;
-          cout << "execout:" << extra["output"] << endl;
         }
         
         dup2(lpipe[0], STDIN_FILENO);
         close(lpipe[0]);
         dup2(rpipe[1], STDOUT_FILENO);
         close(rpipe[1]);
-        _exit(255);
+        close(lpipe[1]);
+        close(rpipe[0]);
 
         if(r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"})) {
           cerr << "load seccomp rule failed" << endl;
@@ -649,7 +659,7 @@ int do_test(json& j) {
 
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
 
-        cerr << "exec failed" << endl;
+        cerr << "child process B exec failed" << endl;
         _exit(255);
       }
 
@@ -681,18 +691,13 @@ int do_test(json& j) {
                                   resource_usage.ru_utime.tv_usec / 1000);
       r["memory"] = case_result.memory = resource_usage.ru_maxrss;
 
-      RESULT rs;
+      RESULT rs = AC;
       if (case_result.signal) {
         switch (case_result.signal)
         {
         case SIGXCPU: rs = TE; break;
         case SIGXFSZ: rs = OLE; break;
-        case SIGSEGV: rs = RE; break;
         case SIGABRT: rs = ME; break;
-        case SIGFPE : rs = RE; break;
-        case SIGBUS	: rs = RE; break;
-        case SIGILL	: rs = RE; break;
-        case SIGKILL: rs = RE; break;
         case SIGSYS:  rs = SLE; break;
         default     : rs = RE; break;
         }
@@ -702,8 +707,31 @@ int do_test(json& j) {
         rs = TE;
       } else if (case_result.memory > memory_limit){
         rs = ME;
-      } else {
-        rs = do_compare(j, extra);;
+      } 
+      if (rs == AC) { // respect result from special judge
+
+        alarm(5);
+        signal(SIGALRM, [](int){ kill(a_pid, SIGKILL); });
+
+        if (wait4(a_pid, &status, WSTOPPED, &resource_usage) == -1) {
+          kill(a_pid, SIGKILL);
+          cerr << "wait on child process failed" << endl;
+          finish(SW);
+        }
+
+        alarm(0);
+
+        if (WIFSIGNALED(status)) {
+          cerr << "spj program is signaled: " << status << endl;
+          rs = SW;
+        } else {
+          switch(WEXITSTATUS(status)){
+          case 0: rs = AC; break;
+          case 1: rs = PE; break;
+          case 2: rs = WA; break;
+          default: rs = SW; break;
+          }
+        }
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
@@ -825,7 +853,7 @@ int do_test(json& j) {
         } else if (case_result.memory > memory_limit){
           rs = ME;
         } else {
-          rs = do_compare(j, extra);;
+          rs = do_compare(j, extra);
         }
         r["status"] = static_cast<int>(rs);
         r["result"] = getStatusText(rs);

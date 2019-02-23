@@ -26,8 +26,8 @@ status_id:
 compiler: 
 extra: 
 
-spj_mode_compare: argv[1] stdin, argv[2] stdout, argv[3] execout, argv[4] result
-spj_mode_interactive: argv[1] stdin, argv[2] stdout, argv[3] result
+spj_mode_compare: argv[1] stdin, argv[2] stdout, argv[3] execout, > result
+spj_mode_interactive: argv[1] stdin, argv[2] stdout, argv[3] result > user stdin
 
 is_signaled: sw
 return 0: consult argv[3] for result, if not exist, ac
