@@ -14,7 +14,6 @@ using json = nlohmann::json;
 
 using namespace std;
 
-
 bool debug = false;
 map<string, string> path;
 json result;
@@ -22,6 +21,16 @@ json result;
 std::string readFile(const string& filename) {
   ifstream in(filename);
   return static_cast<std::stringstream const&>(std::stringstream() << in.rdbuf()).str();
+}
+
+int create_folder(string& path) {
+    const int error = system((string("mkdir -p ") + path).c_str ());
+    if (error != 0)
+    {
+        cerr << "create directory at " << path << " failed" << endl;
+        return -1;
+    }
+    return 0;
 }
 
 void succeeded() {
@@ -148,44 +157,9 @@ int compile_exec_cpp (json& j) {
 int compile_exec_javascript (json& j) {
   if (debug) 
     cout << "language is javascript, skip compile" << endl;
+
   ofstream script(path["exec"] + ".nodejs");
-  string s = R"+(const readline = require('readline');
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-  crlfDelay: Infinity,
-});
-
-const line = (async function* _readLine() {
-  for await (const line of rl) {
-    yield line;
-  }
-})()
-
-async function read() {
-  return (await line.next()).value
-}
-
-function write(data) {
-  process.stdout.write(data.toString())
-}
-
-function writeLine(data) {
-  process.stdout.write(data + '\n')
-}
-
-process.on('unhandledRejection', (reason, p) => {
-  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
-  process.exit(-1)
-});
-
-(async function main() {
-)+"
-+ readFile(path["code"]) +
-R"+(
-})().then(() => process.exit(0)))+";  
+  string s = readFile(path["code"]);
   script << s << endl;
   script.close();
   
@@ -271,6 +245,7 @@ int main (int argc, char** argv) {
   path["exec"] = j["target"].get<string>();
   path["code"] = j["code"].get<string>();
   path["temp"] = "/tmp/spj_compile_" + to_string(time(NULL)) +"/";
+  create_folder(path["temp"]);
   path["cmpinfo"] = path["temp"] + "/result.cmpinfo";
 
   if (r = generate_exec_args(j))

@@ -1,6 +1,6 @@
 {
   "pid": 1001,
   "sid": 10001,
-  "filename": "main.go",
-  "lang": "go"
+  "filename": "main.py",
+  "lang": "python"
 }
