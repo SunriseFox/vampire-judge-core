@@ -1,0 +1,51 @@
+读取配置文件
+
+max_time: 
+max_memory: 
+max_output: 
+on_error_continue: true / status_list [default: ['accepted', 'presentation error']]
+test_case:
+test_case_count:
+user_source:
+user_lang: c / c++ / javascript / go / python / text
+spj_mode: no / compare / interactive
+spj_source: 
+spj_lang:  c / c++ / javascript / go / python
+target_dir:
+
+receive_edit_test_in: 
+receive_edit_test_out: 
+receive_edit_result: 
+
+程序输出
+
+time: 
+memory:
+result:
+status_id:
+compiler: 
+extra: 
+
+spj_mode_compare: argv[1] stdin, argv[2] stdout, argv[3] execout, argv[4] result
+spj_mode_interactive: argv[1] stdin, argv[2] stdout, argv[3] result
+
+is_signaled: sw
+return 0: consult argv[3] for result, if not exist, ac
+return others: use status code
+
+路径：
+临时文件路径 /
+结果路径 
+
+用脚本语言
+
+根路径 /mnt/data/<project_name>/
+
+测试 node C++ 的 fork 
+
+题目数据 /data/<pid>
+用户代码 /code/<pid>/<sid>
+用户程序输出 /result/<pid>/<sid>
+Special Judge /judge/<pid>/
+临时文件 /tmp/judge-<pid>-<sid>/
+
