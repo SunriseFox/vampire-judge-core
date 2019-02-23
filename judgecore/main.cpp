@@ -91,6 +91,8 @@ int finish(RESULT what) {
   result["result"] = getStatusText(what);
   ofstream of(path["result"]);
   of << (debug ? setw(2) : setw(0)) << result << endl;
+  if (debug) 
+    cout << setw(2) << result << endl;
   _exit(0);
 }
 
@@ -145,7 +147,7 @@ int read_config(int argc, char** argv, json& j) {
 
 int validate_config(json& j) {
   // TODO: valid configuration
-  if (debug) 
+  if (debug)
     cout << "[warn] validate configuration is skipped." << endl;
   return 0;
 }
@@ -161,7 +163,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
   }
   if(pid == 0) {
       alarm(10);
-      signal(SIGALRM, [](int sig){exit(-1);});
+      signal(SIGALRM, [](int){exit(-1);});
       int ret = system(compile_command.c_str ());
       unsigned int sec = 10 - alarm(0);
       if (debug)
@@ -186,7 +188,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
       return 0;
   }
   // should not
-  raise(SIGTRAP);
+  raise(SIGSYS);
   return -1;
 }
 
@@ -254,7 +256,7 @@ R"+(
   
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
-  exec << "exec node --no-warnings " + path["exec"] + ".nodejs" << endl;
+  exec << "exec node --no-warnings --max-old-space-size=" + to_string(j["max_memory"].get<int>() / 4000) + " " + path["exec"] + ".nodejs" << endl;
   exec.close();
   return 0;
 }
@@ -333,7 +335,7 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
       SCMP_SYS(clone),
       SCMP_SYS(fork),
       SCMP_SYS(vfork),
-      SCMP_SYS(kill), 
+      SCMP_SYS(kill),
 #ifdef __NR_execveat
       SCMP_SYS(execveat)
 #endif
@@ -343,39 +345,57 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
     // load seccomp rules
     ctx = seccomp_init(SCMP_ACT_ALLOW);
     if (!ctx) {
-        return -1;
+      cerr << "seccomp_init failed" << endl;
+      return -1;
     }
-    for (int i = 0; i < syscalls_blacklist_length; i++) {
-        if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, syscalls_blacklist[i], 0) != 0) {
-            return -1;
-        }
-    }
+    
+    // for (int i = 0; i < syscalls_blacklist_length; i++) {
+    //   if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, syscalls_blacklist[i], 0) != 0) {
+    //     cerr << "seccomp_rule_add 1 failed" << endl;
+    //     return -1;
+    //   }
+    // }
+
     // use SCMP_ACT_KILL for socket, python will be killed immediately
     if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(socket), 0) != 0) {
-        return -1;
+      cerr << "seccomp_rule_add 2 failed" << endl;
+      return -1;
     }
     for (const auto& i : exes) {
-      // add extra rule for execve
-      if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(execve), 1, SCMP_A0(SCMP_CMP_EQ, (scmp_datum_t)(i.c_str()))) != 0) {
-          return -1;
+      if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(execve), 1, SCMP_A0(SCMP_CMP_NE, (scmp_datum_t)(i.c_str()))) != 0) {
+        cerr << "seccomp_rule_add 3 failed" << endl;
+        return -1;  
       }
     }
     // do not allow "w" and "rw" using open
-    if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_WRONLY, O_WRONLY)) != 0) {
-        return -1;
-    }
-    if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_RDWR, O_RDWR)) != 0) {
-        return -1;
-    }
+    // if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_WRONLY, O_WRONLY)) != 0) {
+    //   cerr << "seccomp_rule_add 4 failed" << endl;
+    //   return -1;
+    // }
+    // if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_RDWR, O_RDWR)) != 0) {
+    //   cerr << "seccomp_rule_add 5 failed" << endl;
+    //   return -1;
+    // }
     // do not allow "w" and "rw" using openat
     if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_WRONLY, O_WRONLY)) != 0) {
-        return -1;
+      cerr << "seccomp_rule_add 6 failed" << endl;
+      return -1;
     }
     if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_RDWR, O_RDWR)) != 0) {
-        return -1;
+      cerr << "seccomp_rule_add 7 failed" << endl;
+      return -1;
+    }
+    if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(unlink), 0)) {
+      cerr << "seccomp_rule_add 8 failed" << endl;
+      return -1;
+    }
+    if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(unlinkat), 0)) {
+      cerr << "seccomp_rule_add 9 failed" << endl;
+      return -1;
     }
     if (seccomp_load(ctx) != 0) {
-        return -1;
+      cerr << "seccomp_load 1 failed" << endl;
+      return -1;
     }
     seccomp_release(ctx);
     return 0;
@@ -396,30 +416,36 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
 
     ctx = seccomp_init(SCMP_ACT_TRAP);
     if (!ctx) {
-        return -1;
+      cerr << "seccomp_init failed" << endl;
+      return -1;
     }
     for (int i = 0; i < syscalls_whitelist_length; i++) {
-        if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, syscalls_whitelist[i], 0) != 0) {
-            return -1;
-        }
+      if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, syscalls_whitelist[i], 0) != 0) {
+        cerr << "seccomp_rule_add 0 failed" << endl;
+        return -1;
+      }
     }
 
     for (const auto& i : exes) {
       // add extra rule for execve
       if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(execve), 1, SCMP_A0(SCMP_CMP_EQ, (scmp_datum_t)(i.c_str()))) != 0) {
-          return -1;
+        cerr << "seccomp_rule_add 1 failed" << endl;
+        return -1;
       }
     }
 
     // do not allow "w" and "rw"
     if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_WRONLY | O_RDWR, 0)) != 0) {
-        return -1;
+      cerr << "seccomp_rule_add 2 failed" << endl;
+      return -1;
     }
     if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_WRONLY | O_RDWR, 0)) != 0) {
-        return -1;
+      cerr << "seccomp_rule_add 3 failed" << endl;
+      return -1;
     }
     if (seccomp_load(ctx) != 0) {
-        return -1;
+      cerr << "seccomp_load 1 failed" << endl;
+      return -1;
     }
     seccomp_release(ctx);
     return 0;
@@ -428,6 +454,8 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
 }
 
 bool should_continue(json& j, RESULT r) {
+  if (debug)
+    cout << "check should continue" << endl;
   if (j["on_error_continue"].is_boolean())
     return true;
   if (j["on_error_continue"].is_array()) {
@@ -449,13 +477,13 @@ bool should_continue(json& j, RESULT r) {
 }
 
 RESULT do_compare(json& j, const map<string, string>& extra) {
-  if (j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare"
-    || j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1) {
+  if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare")
+    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1)) {
     // should do spj
     string spj_exec_path = 
       j["spj_exec"].is_string() ? j["spj_exec"].get<string>() : path["spj"];
     string spjcmd = spj_exec_path + " " + extra.at("stdin") + " " 
-      + extra.at("stdout") + " " + extra.at("execout") 
+      + extra.at("stdout") + " " + extra.at("output") 
       + " >" + extra.at("diff") + " 2>&1";
     if (debug)
       cout << "special judge command: " << spjcmd << endl;
@@ -475,13 +503,13 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
     cerr << "special judge program is signaled" << endl;
     return SW; 
   } else {
-    string difcmd = string("diff ") + extra.at("stdout") + " " + extra.at("execout") + " >" + extra.at("diff");
+    string difcmd = string("diff ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("diff");
     int status = system(difcmd.c_str());
 
     if (WEXITSTATUS(status) == 0)
       return AC;
 
-    string difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("stdout") + " " + extra.at("execout") + " >" + extra.at("diff");
+    difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("diff");
     status = system(difcmd.c_str());
 
     if (WEXITSTATUS(status) == 0)
@@ -492,7 +520,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 }
 
 int do_interactive_test(json& j) {
-
+  return 0;
 }
 
 int do_test(json& j) {
@@ -500,7 +528,6 @@ int do_test(json& j) {
   int total_time_limit = j["max_time_total"].get<int>();
   int memory_limit = j["max_memory"].get<int>();
   int output_limit = j["max_output"].get<int>();
-  bool on_error_continue = j["on_error_continue"].get<bool>();
 
   int cases = j["test_case_count"].get<int>();
 
@@ -517,13 +544,16 @@ int do_test(json& j) {
     RESULT result;
   } case_result;
 
+  if (debug)
+    cout << "exec is: " << path["exec"] << endl;
+
   for (int c = 1; c <= cases; c++) {
     string cs = to_string(c);
 
     map<string, string> extra;
     extra["stdin"] = path["stdin"] + "/" + cs + ".in";
     extra["stdout"] = path["stdout"] + "/" + cs + ".out";
-    extra["output"] = path["result"] + "/" + cs + ".execout";
+    extra["output"] = path["output"] + "/" + cs + ".execout";
     extra["diff"] = path["diff"] + "/" + cs + ".diff";
 
     if (debug) {
@@ -543,7 +573,7 @@ int do_test(json& j) {
       int r;
 
       rlimits.rlim_cur = time_limit / 1000 + 1;
-      rlimits.rlim_max = min(time_limit / 1000 * 2, time_limit / 1000 + 4);
+      rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
       if (r = setrlimit(RLIMIT_CPU, &rlimits)) {
         cerr << "set cpu time limit failed, " << r << endl;
         finish(SW);
@@ -563,22 +593,25 @@ int do_test(json& j) {
         finish(SW);
       }
 
-      if (debug)
+      if (debug) {
         cout << "execution begin" << endl;
-      
+        cout << "stdin:" << extra["stdin"] << endl;
+        cout << "execout:" << extra["output"] << endl;
+      }
+
       FILE *file_in = freopen(extra["stdin"].c_str(), "r", stdin);
-      FILE *file_out = freopen(extra["execout"].c_str(), "w", stdout);
+      FILE *file_out = freopen(extra["output"].c_str(), "w", stdout);
 
       if (file_in == nullptr || file_out == nullptr) {
         fclose(file_in);
         fclose(file_out);
         cerr << "failed to redirect input & output." << endl;
-        finish(SW);
+        // finish(SW);
       }
 
       if(r = load_seccomp(0, {path["exec"]})) {
         cerr << "load seccomp rule failed" << endl;
-        return;
+        _exit(255);
       };
 
       execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
@@ -600,10 +633,11 @@ int do_test(json& j) {
 
       json r;
 
-      if (WIFSIGNALED(status) != 0) {
+      if (WIFSIGNALED(status)) {
         if (debug) 
-          cout << "user program is signaled" << endl;
+          cout << "user program is signaled: " << status << endl;
         r["signal"] = case_result.signal = WTERMSIG(status);
+        r["signal_str"] = string(strsignal(WTERMSIG(status)));
       } else {
         case_result.signal = 0;
       }
@@ -611,7 +645,7 @@ int do_test(json& j) {
       r["exitcode"] = case_result.exitcode = WEXITSTATUS(status);
       r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
                                   resource_usage.ru_utime.tv_usec / 1000);
-      r["memory"] = case_result.memory = resource_usage.ru_maxrss * 1024;
+      r["memory"] = case_result.memory = resource_usage.ru_maxrss;
 
       RESULT rs;
       if (case_result.signal) {
@@ -625,14 +659,14 @@ int do_test(json& j) {
         case SIGBUS	: rs = RE; break;
         case SIGILL	: rs = RE; break;
         case SIGKILL: rs = RE; break;
-        case SIGTRAP: rs = SLE; break;
+        case SIGSYS:  rs = SLE; break;
         default     : rs = RE; break;
         }
       } else if (case_result.exitcode) {
         rs = RE;
       } else if (case_result.time > time_limit){
         rs = TE;
-      } else if (case_result.time > memory_limit){
+      } else if (case_result.memory > memory_limit){
         rs = ME;
       } else {
         rs = do_compare(j, extra);;
@@ -709,7 +743,6 @@ int main (int argc, char** argv) {
 
   path["code"] = path["base"] + "/code/" + pid + "/" + sid + "/" + j["filename"].get<string>();
   
-  mode_t original_mask = umask(0777);
   path["exec"] = path["temp"] + "/main";
   unlink(path["exec"].c_str());
   ofstream(path["exec"]).close();

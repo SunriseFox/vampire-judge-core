@@ -1,9 +1,9 @@
 {
   "max_time": 1000,
   "max_time_total": 30000,
-  "max_memory": 65535,
+  "max_memory": 100000,
   "max_output": 10000,
-  "on_error_continue": ["accepted", "presentation error"],
+  "on_error_continue": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 10,
   "spj_mode": "no",
   "spj_exec": null

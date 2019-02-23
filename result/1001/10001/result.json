@@ -1,8 +1,80 @@
 {
-  "compiler": "Traceback (most recent call last):\n  File \"/opt/rh/rh-python36/root/usr/lib64/python3.6/py_compile.py\", line 125, in compile\n    _optimize=optimize)\n  File \"<frozen importlib._bootstrap_external>\", line 741, in source_to_code\n  File \"<frozen importlib._bootstrap>\", line 219, in _call_with_frames_removed\n  File \"/mnt/data//code/1001/10001/main.py\", line 1\n    printsdadsadsda sadads\n                         ^\nSyntaxError: invalid syntax\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/tmp/judge-1001-10001/compile_script.py\", line 2, in <module>\n    py_compile.compile('/mnt/data//code/1001/10001/main.py', cfile='/tmp/judge-1001-10001//main.pyc', doraise=True)\n  File \"/opt/rh/rh-python36/root/usr/lib64/python3.6/py_compile.py\", line 129, in compile\n    raise py_exc\npy_compile.PyCompileError:   File \"/mnt/data//code/1001/10001/main.py\", line 1\n    printsdadsadsda sadads\n                         ^\nSyntaxError: invalid syntax\n\n",
+  "compiler": "",
+  "detail": [
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5596,
+      "result": "accepted",
+      "status": 0,
+      "time": 0
+    },
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 1
+    },
+    {
+      "exitcode": 0,
+      "memory": 5596,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5600,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 5592,
+      "result": "accepted",
+      "status": 0,
+      "time": 0
+    },
+    {
+      "exitcode": 0,
+      "memory": 5592,
+      "result": "accepted",
+      "status": 0,
+      "time": 2
+    }
+  ],
   "extra": null,
-  "memory": 0,
-  "result": "compile error",
-  "status_id": 1,
-  "time": 0
+  "memory": 5600,
+  "result": "accepted",
+  "status": 0,
+  "time": 15
 }
