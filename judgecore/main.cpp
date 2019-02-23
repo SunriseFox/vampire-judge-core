@@ -32,6 +32,29 @@ enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
 enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PATHON, LANG_GO, LANG_TEXT};
 
 int a_pid;
+int lpipe[2], rpipe[2];
+
+void close_pipe()
+{
+  close(lpipe[0]);
+  close(lpipe[1]);
+  close(rpipe[0]);
+  close(rpipe[1]);
+}
+
+void set_read()
+{
+  dup2(rpipe[0], STDIN_FILENO);
+  dup2(lpipe[1], STDOUT_FILENO);
+  close_pipe();
+}
+  
+void set_write()
+{
+  dup2(lpipe[0], STDIN_FILENO);
+  dup2(rpipe[1], STDOUT_FILENO);
+  close_pipe();
+}
 
 int create_folder(string& path) {
     const int error = system((string("mkdir -p ") + path).c_str ());
@@ -580,7 +603,6 @@ int do_test(json& j) {
       }
 
       int b_pid;
-      int lpipe[2], rpipe[2];
       pipe(lpipe);
       pipe(rpipe);
 
@@ -590,12 +612,7 @@ int do_test(json& j) {
       }
 
       if (a_pid == 0) { // process A
-        dup2(rpipe[0], STDIN_FILENO);
-        close(rpipe[0]);
-        dup2(lpipe[1], STDOUT_FILENO);
-        close(lpipe[1]);
-        close(rpipe[1]);
-        close(lpipe[0]);
+        set_read();
 
         execlp(path.at("spj").c_str()
           , path.at("spj").c_str()
@@ -645,12 +662,7 @@ int do_test(json& j) {
           cout << "execution begin" << endl;
         }
         
-        dup2(lpipe[0], STDIN_FILENO);
-        close(lpipe[0]);
-        dup2(rpipe[1], STDOUT_FILENO);
-        close(rpipe[1]);
-        close(lpipe[1]);
-        close(rpipe[0]);
+        set_write();
 
         if(r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"})) {
           cerr << "load seccomp rule failed" << endl;
@@ -664,6 +676,7 @@ int do_test(json& j) {
       }
 
       // parent continues here
+      close_pipe();
 
       int status;
       struct rusage resource_usage;
@@ -690,6 +703,9 @@ int do_test(json& j) {
       r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
                                   resource_usage.ru_utime.tv_usec / 1000);
       r["memory"] = case_result.memory = resource_usage.ru_maxrss;
+
+      if (debug)
+        cout << "user program exited" << endl;
 
       RESULT rs = AC;
       if (case_result.signal) {
