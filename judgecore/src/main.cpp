@@ -832,7 +832,12 @@ int do_test(json& j) {
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
       result["detail"].push_back(r);
-      result["extra"].push_back(readFile(extra.at("log"), 100));
+      string log = readFile(extra.at("log"), 100);
+      if (log.size() == 0) {
+        result["extra"].push_back(nullptr);
+      } else {
+        result["extra"].push_back(log);
+      }
 
       total_time += case_result.time;
       max_memory = max(case_result.memory, max_memory);

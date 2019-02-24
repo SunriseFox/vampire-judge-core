@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
-#include <cstdlib>
-#include <ctime>
+#include <random>
 using namespace std;
 
 int main(int argc, char** argv) {
@@ -12,17 +11,16 @@ int main(int argc, char** argv) {
   ifstream tdout(argv[2]);
   ofstream log(argv[3]);
 
-  srand(time(NULL));
+  mt19937 rng;
+  rng.seed(random_device()());
+  uniform_int_distribution<mt19937::result_type> dist(0, 1);
 
-  int a, b, r = rand() % 2;
+  int a, b, r = dist(rng);
   cin >> a >> b;
-  log << a << " " << b << endl;
   cout << a + b + r << endl;
-  log << a + b + r << endl;
 
   string c;
   cin >> c;
-  log << c << endl;
   
   if (!cin)
     return 2;
@@ -31,10 +29,7 @@ int main(int argc, char** argv) {
   else if ((a + b != a + b + r) && c == "RIGHT") 
     return 2;
 
-  log << "before cin" << endl;
   cin >> a;
-  if (cin) return 1;
-  log << "end cin" << endl;
-
-  return 0;
+  if (cin.eof()) return 0;
+  return 2;
 }

@@ -224,8 +224,6 @@ int generate_exec_args (json& j) {
     } else if(j["lang"].get<int>() == 3) {
       return compile_exec_python(j);
     } else if(j["lang"].get<int>() == 4) {
-      return compile_exec_c(j);
-    } else if(j["lang"].get<int>() == 5) {
       return compile_exec_go(j);
     } else {
       return compile_exec_custom(j);
@@ -235,12 +233,48 @@ int generate_exec_args (json& j) {
   }
 }
 
+string get_lang_ext(json& j) {
+  if (j["lang"].is_string()) {
+    if(j["lang"].get<string>() == "c") {
+      return "c";
+    } else if(j["lang"].get<string>() == "c++") {
+      return "cpp";
+    } else if(j["lang"].get<string>() == "javascript") {
+      return "js";
+    } else if(j["lang"].get<string>() == "python") {
+      return "py";
+    } else if(j["lang"].get<string>() == "go") {
+      return "go";
+    }
+  } else if (j["lang"].is_number_integer()) {
+    if(j["lang"].get<int>() == 0) {
+      return "c";
+    } else if(j["lang"].get<int>() == 1) {
+      return "cpp";
+    } else if(j["lang"].get<int>() == 2) {
+      return "js";
+    } else if(j["lang"].get<int>() == 3) {
+      return "py";
+    } else if(j["lang"].get<int>() == 4) {
+      return "go";
+    }
+  }
+  return "unknown";
+}
+
 int main (int argc, char** argv) {
   json j;
   int r;
 
   if (r = read_config(argc, argv, j))
     _exit(255);
+
+  if (j["code"].is_null()) {
+    j["code"] = j["base_path"].get<string>() + "/judge/" + to_string(j["pid"].get<int>()) + "." + get_lang_ext(j);
+  }
+  if (j["target"].is_null()) {
+    j["target"] = j["base_path"].get<string>() + "/judge/" + to_string(j["pid"].get<int>());
+  }
 
   path["exec"] = j["target"].get<string>();
   path["code"] = j["code"].get<string>();
