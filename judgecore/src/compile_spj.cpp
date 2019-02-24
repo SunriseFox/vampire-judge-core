@@ -12,6 +12,8 @@
 #include "json.hpp"
 using json = nlohmann::json;
 
+#define UNUSED(x) (void)x;
+
 using namespace std;
 
 bool debug = false;
@@ -23,7 +25,7 @@ std::string readFile(const string& filename) {
   return static_cast<std::stringstream const&>(std::stringstream() << in.rdbuf()).str();
 }
 
-int create_folder(string& path) {
+int create_folder(const string& path) {
     const int error = system((string("mkdir -p ") + path).c_str ());
     if (error != 0)
     {
@@ -36,13 +38,13 @@ int create_folder(string& path) {
 void succeeded() {
   result["success"] = true;
   result["target"] = path["exec"];
-  cout << (debug ? setw(4) : setw(0)) << result << endl;
+  cout << (debug ? setw(2) : setw(0)) << result << endl;
   _exit(0);
 }
 
 void failed() {
   result["success"] = false;
-  cout << (debug ? setw(4) : setw(0)) << result << endl;
+  cout << (debug ? setw(2) : setw(0)) << result << endl;
   _exit(255);
 }
 
@@ -96,6 +98,7 @@ int read_config(int argc, char** argv, json& j) {
 }
 
 int comile_c_cpp(json& j, const string& compile_command) {
+  UNUSED(j);
   if (debug) 
     cout << "compiler command: " << compile_command << endl;    
 
@@ -106,7 +109,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
   }
   if(pid == 0) {
       alarm(10);
-      signal(SIGALRM, [](int sig){exit(-1);});
+      signal(SIGALRM, [](int){exit(-1);});
       int ret = system(compile_command.c_str ());
       unsigned int sec = 10 - alarm(0);
       if (debug)
@@ -155,6 +158,7 @@ int compile_exec_cpp (json& j) {
 }
 
 int compile_exec_javascript (json& j) {
+  UNUSED(j);
   if (debug) 
     cout << "language is javascript, skip compile" << endl;
 
@@ -195,6 +199,7 @@ int compile_exec_go (json& j) {
 }
 
 int compile_exec_custom (json& j) {
+  UNUSED(j);
   cerr << "lang not specific or unknown language" << endl;
   return -1;
 }
@@ -266,7 +271,7 @@ int main (int argc, char** argv) {
   json j;
   int r;
 
-  if (r = read_config(argc, argv, j))
+  if ((r = read_config(argc, argv, j)))
     _exit(255);
 
   if (j["code"].is_null()) {
@@ -275,6 +280,13 @@ int main (int argc, char** argv) {
   if (j["target"].is_null()) {
     j["target"] = j["base_path"].get<string>() + "/judge/" + to_string(j["pid"].get<int>());
   }
+  string target = j["target"].get<string>();
+  size_t pos = target.find_last_of("/");
+  if (pos != string::npos) {
+    target = target.substr(0, string::npos);
+    create_folder(target.c_str());
+  }
+
 
   path["exec"] = j["target"].get<string>();
   path["code"] = j["code"].get<string>();
@@ -282,7 +294,7 @@ int main (int argc, char** argv) {
   create_folder(path["temp"]);
   path["cmpinfo"] = path["temp"] + "/result.cmpinfo";
 
-  if (r = generate_exec_args(j))
+  if ((r = generate_exec_args(j)))
     _exit(255);
   succeeded();
   return 0;

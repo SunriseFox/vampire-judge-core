@@ -20,6 +20,8 @@
 #include "json.hpp"
 using json = nlohmann::json;
 
+#define UNUSED(x) (void)x;
+
 using namespace std;
 
 bool debug = false;
@@ -263,6 +265,7 @@ int validate_config(json& j) {
 }
 
 int comile_c_cpp(json& j, const string& compile_command) {
+  UNUSED(j);
   if (debug) 
     cout << "compiler command: " << compile_command << endl;    
 
@@ -396,6 +399,7 @@ int compile_exec_go (json& j) {
 }
 
 int compile_exec_text (json& j) {
+  UNUSED(j);
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
   exec << "exec cat " + path["code"] << endl;
@@ -404,6 +408,7 @@ int compile_exec_text (json& j) {
 }
 
 int compile_exec_custom (json& j) {
+  UNUSED(j);
   cerr << "lang is not specified or unknown language" << endl;
   return -1;
 }
@@ -462,6 +467,8 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
 #endif
     };
     int syscalls_blacklist_length = sizeof(syscalls_blacklist) / sizeof(int);
+    
+    UNUSED(syscalls_blacklist_length);
     scmp_filter_ctx ctx = NULL;
     // load seccomp rules
     ctx = seccomp_init(SCMP_ACT_ALLOW);
@@ -719,21 +726,21 @@ int do_test(json& j) {
 
         rlimits.rlim_cur = time_limit / 1000 + 1;
         rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
-        if (r = setrlimit(RLIMIT_CPU, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
           cerr << "set cpu time limit failed, " << r << endl;
           _exit(255);
         }
 
         rlimits.rlim_cur = memory_limit * 1024 * 2;
         rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-        if (r = setrlimit(RLIMIT_AS, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
           cerr << "set memory limit failed, " << r << endl;
           _exit(255);
         }
 
         rlimits.rlim_cur = output_limit;
         rlimits.rlim_max = output_limit * 2;
-        if (r = setrlimit(RLIMIT_FSIZE, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
           cerr << "set output limit failed, " << r << endl;
           _exit(255);
         }
@@ -744,7 +751,7 @@ int do_test(json& j) {
         
         set_write();
 
-        if(r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"})) {
+        if((r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
           cerr << "load seccomp rule failed" << endl;
           _exit(255);
         };
@@ -860,21 +867,21 @@ int do_test(json& j) {
 
         rlimits.rlim_cur = time_limit / 1000 + 1;
         rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
-        if (r = setrlimit(RLIMIT_CPU, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
           cerr << "set cpu time limit failed, " << r << endl;
           _exit(255);
         }
 
         rlimits.rlim_cur = memory_limit * 1024 * 2;
         rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-        if (r = setrlimit(RLIMIT_AS, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
           cerr << "set memory limit failed, " << r << endl;
           _exit(255);
         }
 
         rlimits.rlim_cur = output_limit;
         rlimits.rlim_max = output_limit * 2;
-        if (r = setrlimit(RLIMIT_FSIZE, &rlimits)) {
+        if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
           cerr << "set output limit failed, " << r << endl;
           _exit(255);
         }
@@ -895,7 +902,7 @@ int do_test(json& j) {
           _exit(255);
         }
 
-        if(r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"})) {
+        if((r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
           cerr << "load seccomp rule failed" << endl;
           _exit(255);
         };
@@ -1003,10 +1010,10 @@ int main (int argc, char** argv) {
   json j;
   int r;
 
-  if (r = read_config(argc, argv, j))
+  if ((r = read_config(argc, argv, j)))
     _exit(255);
 
-  if (r = validate_config(j))
+  if ((r = validate_config(j)))
     _exit(255);
 
   string pid = to_string(j["pid"].get<int>());
@@ -1051,12 +1058,12 @@ int main (int argc, char** argv) {
   result["extra"] = {};
 
   // compile source or check syntax
-  if(r = generate_exec_args(j))
+  if((r = generate_exec_args(j)))
     _exit(255);
   
   // do test
 
-  if(r = do_test(j))
+  if((r = do_test(j)))
     _exit(255);
 
   // should not
