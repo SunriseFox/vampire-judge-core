@@ -4,42 +4,48 @@
     {
       "exitcode": 0,
       "memory": 664,
-      "result": "accepted",
-      "status": 0,
+      "result": "presentation error",
+      "status": 1,
       "time": 1
     },
     {
       "exitcode": 0,
       "memory": 668,
-      "result": "accepted",
-      "status": 0,
+      "result": "presentation error",
+      "status": 1,
+      "time": 2
+    },
+    {
+      "exitcode": 0,
+      "memory": 668,
+      "result": "presentation error",
+      "status": 1,
       "time": 1
     },
     {
       "exitcode": 0,
       "memory": 668,
-      "result": "accepted",
-      "status": 0,
+      "result": "presentation error",
+      "status": 1,
       "time": 1
     },
     {
       "exitcode": 0,
-      "memory": 668,
-      "result": "accepted",
-      "status": 0,
-      "time": 1
-    },
-    {
-      "exitcode": 0,
-      "memory": 668,
-      "result": "accepted",
-      "status": 0,
+      "memory": 672,
+      "result": "presentation error",
+      "status": 1,
       "time": 1
     }
   ],
-  "extra": null,
-  "memory": 668,
-  "result": "accepted",
-  "status": 0,
-  "time": 5
+  "extra": [
+    "1 2\n3\nRIGHT\nbefore cin\n",
+    "1 2\n3\nRIGHT\nbefore cin\n",
+    "1 2\n3\nRIGHT\nbefore cin\n",
+    "1 2\n3\nRIGHT\nbefore cin\n",
+    "1 2\n3\nRIGHT\nbefore cin\n"
+  ],
+  "memory": 672,
+  "result": "presentation error",
+  "status": 1,
+  "time": 6
 }

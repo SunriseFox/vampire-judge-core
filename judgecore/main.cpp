@@ -81,6 +81,15 @@ std::string readFile(const string& filename) {
   return static_cast<std::stringstream const&>(std::stringstream() << in.rdbuf()).str();
 }
 
+std::string readFile(const string& filename, std::string::size_type count)
+{
+  ifstream stream(filename);
+  std::string result(count, '\x00');
+  stream.read(&result[0], count);
+  result.resize(stream.gcount());
+  return result;
+}
+
 string getStatusText(RESULT what) {
   switch (what)
   {
@@ -170,10 +179,87 @@ int read_config(int argc, char** argv, json& j) {
 }
 
 int validate_config(json& j) {
-  // TODO: valid configuration
+
+  int error = 0;
+
   if (debug)
-    cout << "[warn] validate configuration is skipped." << endl;
-  return 0;
+    cout << "validating configuration" << endl;
+  
+  if (!j["pid"].is_number_integer() 
+    || j["pid"].get<int>() < -1) {
+    cerr << "pid is not an integer" << endl;
+    error = 1;
+  }
+
+  if (!j["sid"].is_number_integer()
+    || j["sid"].get<int>() < -1) {
+    cerr << "sid is not an integer" << endl;
+    error = 1;
+  }
+
+  if (!j["filename"].is_string()) {
+    cerr << "filename is not a string" << endl;
+    error = 1;
+  }
+
+  if (!j["lang"].is_string() && !j["lang"].is_number_integer()) {
+    cerr << "lang is not valid" << endl;
+    error = 1;
+  }
+
+  if (j["max_time"].is_null()) {
+    if (debug)
+      cout << "max time is null, default to 1000ms" << endl;
+    j["max_time"] = 1000;
+  } else if (!j["max_time"].is_number_integer() 
+    || j["max_time"].get<int>() < 0) {
+    cerr << "max time is not an integer" << endl;
+    error = 1;
+  }
+
+  if (j["max_time_total"].is_null()) {
+    if (debug)
+      cout << "max time total is null, default to 30000ms" << endl;
+    j["max_time_total"] = 30000;
+  } else if (!j["max_time_total"].is_number_integer() 
+    || j["max_time_total"].get<int>() < 0) {
+    cerr << "max time total is not an integer" << endl;
+    error = 1;
+  } 
+
+  if (j["max_memory"].is_null()) {
+    if (debug)
+      cout << "max memory is null, default to 65535KB" << endl;
+    j["max_memory"] = 65535;
+  } else if (!j["max_memory"].is_number_integer() 
+    || j["max_memory"].get<int>() < 0) {
+    cerr << "max memory is not an integer" << endl;
+    error = 1;
+  }
+
+  if (j["max_output"].is_null()) {
+    if (debug)
+      cout << "max output is null, default to 10000KB" << endl;
+    j["max_output"] = 10000;
+  } else if (!j["max_output"].is_number_integer() 
+    || j["max_output"].get<int>() < 0) {
+    cerr << "max_output is not integer number" << endl;
+    error = 1;
+  }
+  
+  if (!j["test_case_count"].is_number_integer() 
+    || j["test_case_count"].get<int>() < -1) {
+    cerr << "test case count is not acceptable" << endl;
+    error = 1;
+  }
+
+  if (!j["base_dir"].is_string()) {
+    if (debug)
+      cout << "base dir defaults to /mnt/data" << endl;
+    j["base_dir"] = "/mnt/data";
+  }
+
+  return error;
 }
 
 int comile_c_cpp(json& j, const string& compile_command) {
@@ -318,7 +404,7 @@ int compile_exec_text (json& j) {
 }
 
 int compile_exec_custom (json& j) {
-  cerr << "lang not specific or unknown language" << endl;
+  cerr << "lang is not specified or unknown language" << endl;
   return -1;
 }
 
@@ -489,8 +575,6 @@ int load_seccomp(int level, const std::initializer_list<string>& exes) {
 }
 
 bool should_continue(json& j, RESULT r) {
-  if (debug)
-    cout << "checking if should continue" << endl;
   if (j["on_error_continue"].is_boolean())
     return true;
   if (j["on_error_continue"].is_array()) {
@@ -517,7 +601,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
     // should do spj
     string spjcmd = path.at("spj") + " " + extra.at("stdin") + " " 
       + extra.at("stdout") + " " + extra.at("output") 
-      + " >" + extra.at("diff") + " 2>&1";
+      + " >" + extra.at("log") + " 2>&1";
     if (debug)
       cout << "special judge command: " << spjcmd << endl;
     int status = system(spjcmd.c_str());
@@ -536,13 +620,13 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
     cerr << "special judge program is signaled" << endl;
     return SW; 
   } else {
-    string difcmd = string("diff ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("diff");
+    string difcmd = string("diff ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("log");
     int status = system(difcmd.c_str());
 
     if (WEXITSTATUS(status) == 0)
       return AC;
 
-    difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("diff");
+    difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("log");
     status = system(difcmd.c_str());
 
     if (WEXITSTATUS(status) == 0)
@@ -573,8 +657,8 @@ int do_test(json& j) {
     RESULT result;
   } case_result;
 
-  bool is_interactive = j["spj_mode"].is_string() 
-    && j["spj_mode"].get<string>() == "interactive";
+  bool is_interactive = (j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "interactive")
+    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 2);
 
   if (debug)
     cout << "exec is: " << path["exec"] << endl;
@@ -586,39 +670,35 @@ int do_test(json& j) {
     extra["stdin"] = path["stdin"] + "/" + cs + ".in";
     extra["stdout"] = path["stdout"] + "/" + cs + ".out";
     extra["output"] = path["output"] + "/" + cs + ".execout";
-    extra["diff"] = path["diff"] + "/" + cs + ".diff";
+    extra["log"] = path["log"] + "/" + cs + ".log";
 
     if (debug) {
       cout << "test case " << cs << endl;
-      cout << "input " << extra["stdin"] << endl;
+      cout << "input: " << extra["stdin"] << endl;
+      cout << "log: " << extra["log"] << endl;
     }
 
     if (is_interactive) {
-      // A is control process
-      // B is slave process
-
-      if (debug) {
-        cout << "is interactive test" << endl;
-        cout << "log file: " << extra["diff"] << endl;
-      }
+      // A is special judge process
+      // B is user process
 
       int b_pid;
       pipe(lpipe);
       pipe(rpipe);
 
       if ((a_pid = fork()) < 0) {
-        cerr << "fork for judge process A failed" << endl;
+        cerr << "fork judge process A failed" << endl;
         finish(SW);
       }
 
-      if (a_pid == 0) { // process A
+      if (a_pid == 0) { // process A (special judge)
         set_read();
 
         execlp(path.at("spj").c_str()
           , path.at("spj").c_str()
           , extra["stdin"].c_str()
           , extra["stdout"].c_str()
-          , extra["diff"].c_str()
+          , extra["log"].c_str()
           , nullptr
         );
 
@@ -626,14 +706,14 @@ int do_test(json& j) {
         _exit(255);
       }
 
-      // parent continues here
+      // interactive parent continues here
 
       if ((b_pid = fork()) < 0) {
-        cerr << "fork for judge process B failed" << endl;
+        cerr << "fork judge process B failed" << endl;
         finish(SW);
       }
 
-      if (b_pid == 0) { // process B
+      if (b_pid == 0) { // process B (user)
         rlimit rlimits;
         int r;
 
@@ -675,7 +755,7 @@ int do_test(json& j) {
         _exit(255);
       }
 
-      // parent continues here
+      // interactive parent continues here
       close_pipe();
 
       int status;
@@ -687,6 +767,9 @@ int do_test(json& j) {
         cerr << "wait on child process failed" << endl;
         finish(SW);
       }
+
+      if (debug)
+        cout << "user program exited" << endl;
 
       json r;
 
@@ -703,9 +786,6 @@ int do_test(json& j) {
       r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
                                   resource_usage.ru_utime.tv_usec / 1000);
       r["memory"] = case_result.memory = resource_usage.ru_maxrss;
-
-      if (debug)
-        cout << "user program exited" << endl;
 
       RESULT rs = AC;
       if (case_result.signal) {
@@ -724,8 +804,8 @@ int do_test(json& j) {
       } else if (case_result.memory > memory_limit){
         rs = ME;
       } 
-      if (rs == AC) { // respect result from special judge
-
+      if (rs == AC) {
+        // respect result from special judge
         alarm(5);
         signal(SIGALRM, [](int){ kill(a_pid, SIGKILL); });
 
@@ -739,7 +819,7 @@ int do_test(json& j) {
 
         if (WIFSIGNALED(status)) {
           cerr << "spj program is signaled: " << status << endl;
-          rs = SW;
+          rs = RE;
         } else {
           switch(WEXITSTATUS(status)){
           case 0: rs = AC; break;
@@ -752,6 +832,7 @@ int do_test(json& j) {
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
       result["detail"].push_back(r);
+      result["extra"].push_back(readFile(extra.at("log"), 100));
 
       total_time += case_result.time;
       max_memory = max(case_result.memory, max_memory);
@@ -764,11 +845,11 @@ int do_test(json& j) {
       int pid;
 
       if ((pid = fork()) < 0) {
-        cerr << "fork for judge process failed" << endl;
+        cerr << "fork judge process failed" << endl;
         finish(SW);
       }
 
-      if (pid == 0) { // child process
+      if (pid == 0) { // non interactive child
         rlimit rlimits;
         int r;
 
@@ -821,70 +902,71 @@ int do_test(json& j) {
 
         cerr << "exec failed" << endl;
         _exit(255);
-      } else { // parent
-        int status;
-        struct rusage resource_usage;
+      } 
+      // non interactive parent continues here
+      int status;
+      struct rusage resource_usage;
 
-        if (wait4(pid, &status, WSTOPPED, &resource_usage) == -1) {
-          kill(pid, SIGKILL);
-          cerr << "wait on child process failed" << endl;
-          finish(SW);
-        }
-
-        json r;
-
-        if (WIFSIGNALED(status)) {
-          if (debug) 
-            cout << "user program is signaled: " << status << endl;
-          r["signal"] = case_result.signal = WTERMSIG(status);
-          r["signal_str"] = string(strsignal(WTERMSIG(status)));
-        } else {
-          case_result.signal = 0;
-        }
-
-        r["exitcode"] = case_result.exitcode = WEXITSTATUS(status);
-        r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
-                                    resource_usage.ru_utime.tv_usec / 1000);
-        r["memory"] = case_result.memory = resource_usage.ru_maxrss;
-
-        RESULT rs;
-        if (case_result.signal) {
-          switch (case_result.signal)
-          {
-          case SIGXCPU: rs = TE; break;
-          case SIGXFSZ: rs = OLE; break;
-          case SIGSEGV: rs = RE; break;
-          case SIGABRT: rs = ME; break;
-          case SIGFPE : rs = RE; break;
-          case SIGBUS	: rs = RE; break;
-          case SIGILL	: rs = RE; break;
-          case SIGKILL: rs = RE; break;
-          case SIGSYS:  rs = SLE; break;
-          default     : rs = RE; break;
-          }
-        } else if (case_result.exitcode) {
-          rs = RE;
-        } else if (case_result.time > time_limit){
-          rs = TE;
-        } else if (case_result.memory > memory_limit){
-          rs = ME;
-        } else {
-          rs = do_compare(j, extra);
-        }
-        r["status"] = static_cast<int>(rs);
-        r["result"] = getStatusText(rs);
-        result["detail"].push_back(r);
-
-        total_time += case_result.time;
-        max_memory = max(case_result.memory, max_memory);
-
-        if (!should_continue(j, rs)) {
-          fatal_status = rs;
-          break;
-        }
+      if (wait4(pid, &status, WSTOPPED, &resource_usage) == -1) {
+        kill(pid, SIGKILL);
+        cerr << "wait on child process failed" << endl;
+        finish(SW);
       }
-    }
-  }
+
+      json r;
+
+      if (WIFSIGNALED(status)) {
+        if (debug) 
+          cout << "user program is signaled: " << status << endl;
+        r["signal"] = case_result.signal = WTERMSIG(status);
+        r["signal_str"] = string(strsignal(WTERMSIG(status)));
+      } else {
+        case_result.signal = 0;
+      }
+
+      r["exitcode"] = case_result.exitcode = WEXITSTATUS(status);
+      r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
+                                  resource_usage.ru_utime.tv_usec / 1000);
+      r["memory"] = case_result.memory = resource_usage.ru_maxrss;
+
+      RESULT rs;
+      if (case_result.signal) {
+        switch (case_result.signal)
+        {
+        case SIGXCPU: rs = TE; break;
+        case SIGXFSZ: rs = OLE; break;
+        case SIGSEGV: rs = RE; break;
+        case SIGABRT: rs = ME; break;
+        case SIGFPE : rs = RE; break;
+        case SIGBUS	: rs = RE; break;
+        case SIGILL	: rs = RE; break;
+        case SIGKILL: rs = RE; break;
+        case SIGSYS:  rs = SLE; break;
+        default     : rs = RE; break;
+        }
+      } else if (case_result.exitcode) {
+        rs = RE;
+      } else if (case_result.time > time_limit){
+        rs = TE;
+      } else if (case_result.memory > memory_limit){
+        rs = ME;
+      } else {
+        rs = do_compare(j, extra);
+      }
+      r["status"] = static_cast<int>(rs);
+      r["result"] = getStatusText(rs);
+      result["detail"].push_back(r);
+
+      total_time += case_result.time;
+      max_memory = max(case_result.memory, max_memory);
+
+      if (!should_continue(j, rs)) {
+        fatal_status = rs;
+        break;
+      }
+      // non interactive parent end
+    } // non interactive judge
+  } // case loop
 
   result["time"] = total_time;
   result["memory"] = max_memory;
@@ -895,7 +977,7 @@ int do_test(json& j) {
   if (total_time > total_time_limit) {
     finish(TE);
   } else if (max_memory > memory_limit) {
-    cerr << "should not caught here" << endl;
+    cerr << "should not be caught here" << endl;
     finish(ME);
   }
 
@@ -937,7 +1019,7 @@ int main (int argc, char** argv) {
   path["stdin"] = path["base"] + "/case/" + pid +"/";
   path["stdout"] = path["base"] + "/case/" + pid + "/";
 
-  path["diff"] = path["temp"];
+  path["log"] = path["temp"];
 
   // Files
   path["result"] = path["output"] + "/result.json";
@@ -951,19 +1033,17 @@ int main (int argc, char** argv) {
 
   path["spj"] = path["base"] + "/judge/" + pid;
   path["spj"] = j["spj_exec"].is_string() ? j["spj_exec"].get<string>() : path["spj"];
-  path["spjlog"] = path["temp"] + "result.spjinfo";
-  unlink(path["spjlog"].c_str());
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());
 
   result["time"] = 0;
   result["memory"] = 0;
-  result["result"] = "system error";
+  result["result"] = getStatusText(SW);
   result["status"] = static_cast<int>(SW);
   result["detail"] = {};
   result["compiler"] = nullptr;
-  result["extra"] = nullptr;
+  result["extra"] = {};
 
   // compile source or check syntax
   if(r = generate_exec_args(j))

@@ -7,8 +7,8 @@ int main() {
   int a;
   cin >> a;
   if (a == 3)
-    cout << "RIGHT" << endl;
+    cout << "RIGHT 9" << endl;
   else
-    cout << "WRONG" << endl;
+    cout << "WRONG +" << endl;
   return 0;
 }
