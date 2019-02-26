@@ -1,12 +1,8 @@
-代码整理 LANG -> enum, struct config, 分文件分模块
-
-process_to_kill
-
-添加执行闹钟时间限制
-
 系统调用拦截模式
 
-STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX
+STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX -> CUSTOM
+
+支持单线程、多线程的拦截模式
 
 bpf 关注想要关注的系统调用
 https://www.freebsd.org/cgi/man.cgi?query=bpf
@@ -24,11 +20,13 @@ https://www.alfonsobeato.net/c/filter-and-modify-system-calls-with-seccomp-and-p
 当前已有系统存在的问题
 
 可能的威胁模型，介绍
-设计对应的安全模型，防御对策，介绍
+设计对应的安全模型、多线程多进程，防御对策，介绍
 方案：创建销毁 Docker、拦截系统调用（慢）、使用 libseccomp （限制多）、使用 BPF
 对威胁的拦截能力验证，正常程序误报率
 与目前已有解决方案对比
-对应的性能评测指标，与创建销毁 Docker 对比性能情况验证与优劣势分析
+对应的性能评测指标，与创建销毁 Docker 对比、单纯拦截系统调用对比、libseccomp 对比性能情况验证与优劣势分析
 
 对其他新的安全环境、跨指令集的构建执行支持
 Docker 与 QEMU 的协作执行
+
+http://www.linux-kongress.org/2009/slides/system_call_tracing_overhead_joerg_zinke.pdf
