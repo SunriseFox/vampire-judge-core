@@ -22,9 +22,9 @@ RUN yum -y install rh-python36
 
 RUN yum -y install golang
 
-# libseccomp
+# static lib
 
-RUN yum -y install libseccomp-devel
+RUN yum -y install glibc-static
 
 # enable in path
 

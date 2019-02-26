@@ -7,15 +7,22 @@
 
 #include <signal.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
-#include <seccomp.h>
 #include <fcntl.h>
 
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/ptrace.h>
+#include <sys/user.h>
 #include <sys/resource.h>
+#include <sys/reg.h>
+
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <sys/prctl.h>
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -24,17 +31,23 @@ using json = nlohmann::json;
 
 using namespace std;
 
+enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
+enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PYTHON, LANG_GO, LANG_TEXT};
+enum SPJ_MODE {SPJ_NO = 0, SPJ_COMPARE, SPJ_INTERACTIVE};
+enum SECCOMP_POLICY {POLICY_STRICT_SAFE = 0, POLICY_ALLOW_COMMON, POLICY_BESTEFFORT_SANDBOX};
+
+int pid_to_kill = -1;
+int lpipe[2], rpipe[2];
+int r;
+
 bool debug = false;
+SPJ_MODE spj_mode = SPJ_NO;
+LANGUAGE language;
 
 json result;
 
 map<string, string> path;
-
-enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
-enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PATHON, LANG_GO, LANG_TEXT};
-
-int a_pid;
-int lpipe[2], rpipe[2];
+map <int, string> syscall_name;
 
 void close_pipe()
 {
@@ -56,6 +69,11 @@ void set_write()
   dup2(lpipe[0], STDIN_FILENO);
   dup2(rpipe[1], STDOUT_FILENO);
   close_pipe();
+}
+
+void kill_timeout (int) {
+  cerr << "killing " << pid_to_kill << " for sleeping too long" << endl;
+  kill(pid_to_kill, SIGKILL);
 }
 
 int create_folder(string& path) {
@@ -175,7 +193,7 @@ int read_config(int argc, char** argv, json& j) {
   }
 
   if (debug) {
-    cout << setw(4) << j << endl;
+    cout << setw(2) << j << endl;
   }
   return 0;
 }
@@ -261,6 +279,52 @@ int validate_config(json& j) {
     j["base_dir"] = "/mnt/data";
   }
 
+  if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare")
+    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1)) {
+    spj_mode = SPJ_COMPARE;
+  } else if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "interactive")
+    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 2)) {
+    spj_mode = SPJ_INTERACTIVE;
+  } else {
+    spj_mode = SPJ_NO;
+  }
+
+  if (j["lang"].is_string()) {
+    string lang_str = j["lang"].get<string>();
+    if(lang_str == "c") {
+      language = LANG_C;
+    } else if(lang_str == "c++") {
+      language = LANG_CPP;
+    } else if(lang_str == "javascript") {
+      language = LANG_JAVASCRIPT;
+    } else if(lang_str == "python") {
+      language = LANG_PYTHON;
+    } else if(lang_str == "go") {
+      language = LANG_GO;
+    } else if(lang_str == "text") {
+      language = LANG_TEXT;
+    } else {
+      cerr << "unknown language " << lang_str << endl;
+      error = 1;
+
+    }
+  } else if (j["lang"].is_number_integer()) {
+    int lang_int = j["lang"].get<int>();
+    switch (lang_int)
+    {
+      case 0: language = LANG_C; break;
+      case 1: language = LANG_CPP; break;
+      case 2: language = LANG_JAVASCRIPT; break;
+      case 3: language = LANG_PYTHON; break;
+      case 4: language = LANG_GO; break;
+      case 5: language = LANG_TEXT; break;
+      default:
+        cerr << "unknown language id" << lang_int << endl;
+        error = 1;
+        break;
+    }
+  }
+
   return error;
 }
 
@@ -308,7 +372,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
 int compile_exec_c (json& j) {
   if (debug) 
     cout << "language is c" << endl;
-  string compile_command = "gcc -DONLINE_JUDGE -O2 -std=c11 -fno-asm -Wall -Wextra -o "
+  string compile_command = "gcc -DONLINE_JUDGE -O2 -static -std=c11 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
           + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
@@ -317,7 +381,7 @@ int compile_exec_c (json& j) {
 int compile_exec_cpp (json& j) {
   if (debug) 
     cout << "language is cpp" << endl;
-  string compile_command = "g++ -DONLINE_JUDGE -O2 -std=c++14 -fno-asm -Wall -Wextra -o "
+  string compile_command = "g++ -DONLINE_JUDGE -O2 -static -std=c++14 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
           + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
@@ -407,181 +471,108 @@ int compile_exec_text (json& j) {
   return 0;
 }
 
-int compile_exec_custom (json& j) {
-  UNUSED(j);
-  cerr << "lang is not specified or unknown language" << endl;
+int generate_exec_args (json& j) {
+  switch (language) {
+  case LANG_C:
+    return compile_exec_c(j);
+  case LANG_CPP:
+    return compile_exec_cpp(j);
+  case LANG_JAVASCRIPT:
+    return compile_exec_javascript(j);
+  case LANG_PYTHON:
+    return compile_exec_python(j);
+  case LANG_GO:
+    return compile_exec_go(j);
+  case LANG_TEXT:
+    return compile_exec_text(j);
+  default:
+    cerr << "unknown language (should not)" << endl;
+    return -1;
+  }
   return -1;
 }
 
-int generate_exec_args (json& j) {
-  if (j["lang"].is_string()) {
-    if(j["lang"].get<string>() == "c") {
-      return compile_exec_c(j);
-    } else if(j["lang"].get<string>() == "c++") {
-      return compile_exec_cpp(j);
-    } else if(j["lang"].get<string>() == "javascript") {
-      return compile_exec_javascript(j);
-    } else if(j["lang"].get<string>() == "python") {
-      return compile_exec_python(j);
-    } else if(j["lang"].get<string>() == "go") {
-      return compile_exec_go(j);
-    } if(j["lang"].get<string>() == "text") {
-      return compile_exec_text(j);
-    } else {
-      return compile_exec_custom(j);
-    }
-  } else if (j["lang"].is_number_integer()) {
-    if(j["lang"].get<int>() == 0) {
-      return compile_exec_c(j);
-    } else if(j["lang"].get<int>() == 1) {
-      return compile_exec_cpp(j);
-    } else if(j["lang"].get<int>() == 2) {
-      return compile_exec_javascript(j);
-    } else if(j["lang"].get<int>() == 3) {
-      return compile_exec_python(j);
-    } else if(j["lang"].get<int>() == 4) {
-      return compile_exec_go(j);
-    } else if(j["lang"].get<int>() == 5) {
-      return compile_exec_text(j);
-    } else {
-      return compile_exec_custom(j);
-    }
-  } else {
-    return -1;
-  }
-}
-
-int load_seccomp(int level, const std::initializer_list<string>& exes) {
+int load_seccomp_child(int level, const std::initializer_list<string>& exes) {
   setuid(99);
   setgid(99);
   nice(10);
-  if (level == 0) {
-    cerr << "[warn] this profile may cause fatal security issues" << endl;
-    int syscalls_blacklist[] = {
-      SCMP_SYS(clone),
-      SCMP_SYS(fork),
-      SCMP_SYS(vfork),
-      SCMP_SYS(kill),
-#ifdef __NR_execveat
-      SCMP_SYS(execveat)
-#endif
-    };
-    int syscalls_blacklist_length = sizeof(syscalls_blacklist) / sizeof(int);
-    
-    UNUSED(syscalls_blacklist_length);
-    scmp_filter_ctx ctx = NULL;
-    // load seccomp rules
-    ctx = seccomp_init(SCMP_ACT_ALLOW);
-    if (!ctx) {
-      cerr << "seccomp_init failed" << endl;
-      return -1;
-    }
-    
-    // for (int i = 0; i < syscalls_blacklist_length; i++) {
-    //   if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, syscalls_blacklist[i], 0) != 0) {
-    //     cerr << "seccomp_rule_add 1 failed" << endl;
-    //     return -1;
-    //   }
-    // }
 
-    // use SCMP_ACT_KILL for socket, python will be killed immediately
-    if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(socket), 0) != 0) {
-      cerr << "seccomp_rule_add 2 failed" << endl;
-      return -1;
-    }
-    // for (const auto& i : exes) {
-    //   if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(execve), 1, SCMP_A0(SCMP_CMP_EQ, (scmp_datum_t)(i.c_str()))) != 0) {
-    //     cerr << "seccomp_rule_add 3 failed" << endl;
-    //     return -1;  
-    //   }
-    // }
-    // do not allow "w" and "rw" using open
-    // if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_WRONLY, O_WRONLY)) != 0) {
-    //   cerr << "seccomp_rule_add 4 failed" << endl;
-    //   return -1;
-    // }
-    // if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_RDWR, O_RDWR)) != 0) {
-    //   cerr << "seccomp_rule_add 5 failed" << endl;
-    //   return -1;
-    // }
-    // do not allow "w" and "rw" using openat
-    if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_WRONLY, O_WRONLY)) != 0) {
-      cerr << "seccomp_rule_add 6 failed" << endl;
-      return -1;
-    }
-    if (seccomp_rule_add(ctx, SCMP_ACT_TRAP, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_RDWR, O_RDWR)) != 0) {
-      cerr << "seccomp_rule_add 7 failed" << endl;
-      return -1;
-    }
-    if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(unlink), 0)) {
-      cerr << "seccomp_rule_add 8 failed" << endl;
-      return -1;
-    }
-    if (seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EACCES), SCMP_SYS(unlinkat), 0)) {
-      cerr << "seccomp_rule_add 9 failed" << endl;
-      return -1;
-    }
-    if (seccomp_load(ctx) != 0) {
-      cerr << "seccomp_load 1 failed" << endl;
-      return -1;
-    }
-    seccomp_release(ctx);
-    return 0;
-  } else {
-    int syscalls_whitelist[] = {
-      SCMP_SYS(read), SCMP_SYS(fstat),
-      SCMP_SYS(mmap), SCMP_SYS(mprotect),
-      SCMP_SYS(munmap), SCMP_SYS(uname),
-      SCMP_SYS(arch_prctl), SCMP_SYS(brk),
-      SCMP_SYS(access), SCMP_SYS(exit_group),
-      SCMP_SYS(close), SCMP_SYS(readlink),
-      SCMP_SYS(sysinfo), SCMP_SYS(write),
-      SCMP_SYS(writev), SCMP_SYS(lseek)
-    };
+  ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);
+  return 0;
+}
 
-    int syscalls_whitelist_length = sizeof(syscalls_whitelist) / sizeof(int);
-    scmp_filter_ctx ctx = NULL;
-
-    ctx = seccomp_init(SCMP_ACT_TRAP);
-    if (!ctx) {
-      cerr << "seccomp_init failed" << endl;
-      return -1;
-    }
-    for (int i = 0; i < syscalls_whitelist_length; i++) {
-      if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, syscalls_whitelist[i], 0) != 0) {
-        cerr << "seccomp_rule_add 0 failed" << endl;
-        return -1;
-      }
-    }
-
-    for (const auto& i : exes) {
-      // add extra rule for execve
-      if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(execve), 1, SCMP_A0(SCMP_CMP_EQ, (scmp_datum_t)(i.c_str()))) != 0) {
-        cerr << "seccomp_rule_add 1 failed" << endl;
-        return -1;
-      }
-    }
-
-    // do not allow "w" and "rw"
-    if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(open), 1, SCMP_CMP(1, SCMP_CMP_MASKED_EQ, O_WRONLY | O_RDWR, 0)) != 0) {
-      cerr << "seccomp_rule_add 2 failed" << endl;
-      return -1;
-    }
-    if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), 1, SCMP_CMP(2, SCMP_CMP_MASKED_EQ, O_WRONLY | O_RDWR, 0)) != 0) {
-      cerr << "seccomp_rule_add 3 failed" << endl;
-      return -1;
-    }
-    if (seccomp_load(ctx) != 0) {
-      cerr << "seccomp_load 1 failed" << endl;
-      return -1;
-    }
-    seccomp_release(ctx);
-    return 0;
+int load_seccomp_parent(const int& pid, int level, int& status, rusage& usage) {
+  int orig_eax, eax, r;
+  if (pid != wait4(pid, &status, 0, &usage))
+  {
+    cerr << "wait for child failed" << endl;
+    return 1;
   }
+
+  ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
+  ptrace(PTRACE_SYSCALL, pid, 0, 0);
+
+  int last_sig = -1;
+
+  while (pid == wait4(pid, &status, 0, &usage))
+  {
+    if (WIFSIGNALED(status))
+    {
+      kill(pid, SIGKILL);
+      cout << "user program terminated by system signal " << WTERMSIG(status) << endl;
+      break;
+    }
+
+    if (WIFEXITED(status))
+    {
+      kill(pid, SIGKILL);
+      cout << "user program exited normally" << endl;
+      cout << "status: " << WEXITSTATUS(status) << endl;
+      break;
+    }
+
+    if (WSTOPSIG(status) & 0x80)
+    {
+      // syscall number
+      orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
+      eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RAX, NULL);
+      cout << "got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
+
+      // if (orig_eax == __NR_open)
+      // { 
+      //   handler_sys_open(pid);
+      // }
+      // else if (orig_eax == __NR_openat)
+      // {
+      //   handler_sys_openat(pid);
+      // }
+
+      if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+      {
+        cout << "failed to continue from breakpoint" << endl;
+        kill(pid, SIGKILL);
+        return -1;
+      }
+    }
+    else
+    {
+      if (last_sig == WSTOPSIG(status)){
+        status = last_sig;
+        kill(pid, SIGKILL);
+        return 0;
+      }
+      last_sig = WSTOPSIG(status);
+      cout << "program stop with unknown sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+      ptrace(PTRACE_SYSCALL, pid, 0, 0);
+      continue;
+    }
+  }
+
   return -1;
 }
 
-bool should_continue(json& j, RESULT r) {
+bool should_continue(json &j, RESULT r)
+{
   if (j["on_error_continue"].is_boolean())
     return true;
   if (j["on_error_continue"].is_array()) {
@@ -603,8 +594,8 @@ bool should_continue(json& j, RESULT r) {
 }
 
 RESULT do_compare(json& j, const map<string, string>& extra) {
-  if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare")
-    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1)) {
+  UNUSED(j);
+  if (spj_mode == SPJ_COMPARE) {
     // should do spj
     string spjcmd = path.at("spj") + " " + extra.at("stdin") + " " 
       + extra.at("stdout") + " " + extra.at("output") 
@@ -643,6 +634,42 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   return SW;
 }
 
+int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
+  rlimit rlimits;
+
+  rlimits.rlim_cur = time_limit / 1000 + 1;
+  rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
+  if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
+    cerr << "set cpu time limit failed, " << r << endl;
+    _exit(255);
+  }
+
+  if (language != LANG_JAVASCRIPT) {
+    rlimits.rlim_cur = memory_limit * 1024 * 2;
+    rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
+    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
+      cerr << "set memory limit failed, " << r << endl;
+      _exit(255);
+    }
+  } else {
+    rlimits.rlim_cur = 0x7fffffff;
+    rlimits.rlim_max = 0x7fffffff;
+    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
+      cerr << "set memory limit failed, " << r << endl;
+      _exit(255);
+    }
+  }
+
+  rlimits.rlim_cur = output_limit;
+  rlimits.rlim_max = output_limit * 2;
+  if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
+    cerr << "set output limit failed, " << r << endl;
+    _exit(255);
+  }
+
+  return 0;
+}
+
 int do_test(json& j) {
   int time_limit = j["max_time"].get<int>();
   int total_time_limit = j["max_time_total"].get<int>();
@@ -664,9 +691,6 @@ int do_test(json& j) {
     RESULT result;
   } case_result;
 
-  bool is_interactive = (j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "interactive")
-    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 2);
-
   if (debug)
     cout << "exec is: " << path["exec"] << endl;
 
@@ -685,11 +709,11 @@ int do_test(json& j) {
       cout << "log: " << extra["log"] << endl;
     }
 
-    if (is_interactive) {
+    if (spj_mode == SPJ_INTERACTIVE) {
       // A is special judge process
       // B is user process
 
-      int b_pid;
+      int a_pid, b_pid;
       pipe(lpipe);
       pipe(rpipe);
 
@@ -721,29 +745,7 @@ int do_test(json& j) {
       }
 
       if (b_pid == 0) { // process B (user)
-        rlimit rlimits;
-        int r;
-
-        rlimits.rlim_cur = time_limit / 1000 + 1;
-        rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
-        if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
-          cerr << "set cpu time limit failed, " << r << endl;
-          _exit(255);
-        }
-
-        rlimits.rlim_cur = memory_limit * 1024 * 2;
-        rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-        if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-          cerr << "set memory limit failed, " << r << endl;
-          _exit(255);
-        }
-
-        rlimits.rlim_cur = output_limit;
-        rlimits.rlim_max = output_limit * 2;
-        if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
-          cerr << "set output limit failed, " << r << endl;
-          _exit(255);
-        }
+        set_resource_limit(time_limit, memory_limit, output_limit);
 
         if (debug) {
           cout << "execution begin" << endl;
@@ -751,7 +753,7 @@ int do_test(json& j) {
         
         set_write();
 
-        if((r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
+        if((r = load_seccomp_child(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
           cerr << "load seccomp rule failed" << endl;
           _exit(255);
         };
@@ -768,12 +770,19 @@ int do_test(json& j) {
       int status;
       struct rusage resource_usage;
 
+      pid_to_kill = b_pid;
+      
+      alarm(time_limit / 1000 + 5);
+      signal(SIGALRM, kill_timeout);
+
       if (wait4(b_pid, &status, WSTOPPED, &resource_usage) == -1) {
         kill(b_pid, SIGKILL);
         kill(a_pid, SIGKILL);
         cerr << "wait on child process failed" << endl;
         finish(SW);
       }
+
+      alarm(0);
 
       if (debug)
         cout << "user program exited" << endl;
@@ -813,8 +822,9 @@ int do_test(json& j) {
       } 
       if (rs == AC) {
         // respect result from special judge
+        pid_to_kill = a_pid;
         alarm(5);
-        signal(SIGALRM, [](int){ kill(a_pid, SIGKILL); });
+        signal(SIGALRM, kill_timeout);
 
         if (wait4(a_pid, &status, WSTOPPED, &resource_usage) == -1) {
           kill(a_pid, SIGKILL);
@@ -835,6 +845,8 @@ int do_test(json& j) {
           default: rs = SW; break;
           }
         }
+      } else {
+        kill(a_pid, SIGKILL);
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
@@ -862,29 +874,8 @@ int do_test(json& j) {
       }
 
       if (pid == 0) { // non interactive child
-        rlimit rlimits;
-        int r;
 
-        rlimits.rlim_cur = time_limit / 1000 + 1;
-        rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
-        if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
-          cerr << "set cpu time limit failed, " << r << endl;
-          _exit(255);
-        }
-
-        rlimits.rlim_cur = memory_limit * 1024 * 2;
-        rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-        if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-          cerr << "set memory limit failed, " << r << endl;
-          _exit(255);
-        }
-
-        rlimits.rlim_cur = output_limit;
-        rlimits.rlim_max = output_limit * 2;
-        if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
-          cerr << "set output limit failed, " << r << endl;
-          _exit(255);
-        }
+        set_resource_limit(time_limit, memory_limit, output_limit);  
 
         if (debug) {
           cout << "execution begin" << endl;
@@ -902,7 +893,7 @@ int do_test(json& j) {
           _exit(255);
         }
 
-        if((r = load_seccomp(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
+        if((r = load_seccomp_child(0, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
           cerr << "load seccomp rule failed" << endl;
           _exit(255);
         };
@@ -919,11 +910,14 @@ int do_test(json& j) {
       int status;
       struct rusage resource_usage;
 
-      if (wait4(pid, &status, WSTOPPED, &resource_usage) == -1) {
-        kill(pid, SIGKILL);
-        cerr << "wait on child process failed" << endl;
-        finish(SW);
-      }
+      pid_to_kill = pid;
+
+      alarm(time_limit / 1000 + 5);
+      signal(SIGALRM, kill_timeout);
+      
+      load_seccomp_parent(pid, 0, status, resource_usage);
+
+      alarm(0);
 
       json r;
 
@@ -1005,8 +999,11 @@ int do_test(json& j) {
   return -1;
 }
 
+#include "syscall_name.hpp"
 
 int main (int argc, char** argv) {
+  initialize(syscall_name);
+
   json j;
   int r;
 
