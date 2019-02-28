@@ -1,11 +1,22 @@
+anysandbox
+
+lang spec: 内存时间限制，安全函数， 编译命令行 
+
+OJ 与 系统对接样例
+
 系统调用拦截模式
 
 STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX -> CUSTOM
 
-支持单线程、多线程的拦截模式
+支持单线程、多线程(多进程)的拦截模式 最多追踪 3 线程?
+
+线程追踪结构，输出锁 std::this_thread::get_id()
+等待所有线程完成
 
 bpf 关注想要关注的系统调用
 https://www.freebsd.org/cgi/man.cgi?query=bpf
+
+缺点：不能对多进程进行追踪
 
 按照第x个参数是路径的 分类系统调用
 

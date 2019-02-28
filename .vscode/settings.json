@@ -63,6 +63,7 @@
     "shared_mutex": "cpp",
     "thread": "cpp",
     "typeindex": "cpp",
-    "charconv": "cpp"
+    "charconv": "cpp",
+    "map": "cpp"
   }
 }

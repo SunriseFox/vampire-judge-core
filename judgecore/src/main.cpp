@@ -630,16 +630,17 @@ int load_seccomp_parent(const int& pid, SECCOMP_POLICY level, int& status, rusag
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
       cout << "got cloned process " << child_pid << endl;
       ptrace(PTRACE_SYSCALL, pid, 0, 0);
+      if (waitpid(child_pid, &status, WSTOPPED))
+        perror("while waitpid");
       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
         perror("while detach");
-      // new std::thread([=]() {
-      //   // alarm(1);
-      //   int child_status;
-      //   rusage child_usage;
-      //   if (ptrace(PTRACE_ATTACH, child_pid, NULL, NULL)) 
-      //     perror("while attach");
-      //   load_seccomp_parent(child_pid, level, child_status, child_usage);
-      // });
+      new std::thread([=]() {
+        int child_status;
+        rusage child_usage;
+        if (ptrace(PTRACE_SEIZE, child_pid, NULL, NULL)) 
+          perror("while attach");
+        load_seccomp_parent(child_pid, level, child_status, child_usage);
+      });
       continue;
     }
     if (WIFSIGNALED(status))
