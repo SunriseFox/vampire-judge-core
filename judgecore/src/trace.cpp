@@ -52,8 +52,8 @@ int trace_thread(int pid, THREAD_INFO* info) {
   cout << "[" << pid << "] prepare tracing" << endl;
   int orig_eax, eax, r;
   long last_rip = 0;
-  int * status = &(info->status);
-  rusage* usage = &(info->usage);
+  int& status = info->status;
+  rusage& usage = info->usage;
   if (ptrace(PTRACE_SEIZE, pid, NULL, NULL)) {
     perror("while attach");
     return -1;
@@ -66,19 +66,23 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
   cout << "[" << pid << "] start tracing" << endl;
 
-  while (pid == wait4(pid, status, 0, usage))
+  while (pid == wait4(pid, &status, 0, &usage))
   {
-    if (*status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) 
-      || *status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))) {
+    if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) 
+      || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))) {
 
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
       cout << "[" << pid << "] cloned process " << child_pid << endl;
+      if (!child_pid) {
+        cerr << "failed clone process" << endl;
+        return -1;
+      }
       ptrace(PTRACE_SYSCALL, pid, 0, 0);
 
       kill(child_pid, SIGSTOP);
 
-      if (waitpid(child_pid, status, WSTOPPED))
+      if (waitpid(child_pid, &status, WSTOPPED))
         perror("while waitpid");
       
       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
@@ -88,28 +92,28 @@ int trace_thread(int pid, THREAD_INFO* info) {
         
       THREAD_INFO* next = new THREAD_INFO;
       tail = tail->next = next;
-      next->ref = new std::thread(trace_thread, child_pid, info);
+      next->ref = new std::thread(trace_thread, child_pid, tail);
       next->pid = child_pid;
 
       g_tail_mutex.unlock();
       continue;
     }
-    if (WIFSIGNALED(*status))
+    if (WIFSIGNALED(status))
     {
       kill(pid, SIGKILL);
-      cout << "[" << pid << "] user program terminated by system signal " << WTERMSIG(*status) << endl;
-      break;
+      cout << "[" << pid << "] user program terminated by system signal " << WTERMSIG(status) << endl;
+      return 0;
     } 
 
-    if (WIFEXITED(*status))
+    if (WIFEXITED(status))
     {
       kill(pid, SIGKILL);
       cout << "[" << pid << "] user program exited normally" << endl;
-      cout << "[" << pid << "] status: " << WEXITSTATUS(*status) << endl;
+      cout << "[" << pid << "] status: " << WEXITSTATUS(status) << endl;
       return 0;
     }
 
-    if (WSTOPSIG(*status) & 0x80)
+    if (WSTOPSIG(status) & 0x80)
     {
       // syscall number
       orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
@@ -125,29 +129,13 @@ int trace_thread(int pid, THREAD_INFO* info) {
     }
     else
     {
-      // siginfo_t siginfo;
-      // ptrace(PTRACE_GETSIGINFO, pid, NULL, &siginfo);
-      // cout << endl << "[" << pid << "]" 
-      //   << siginfo.si_signo << " " << siginfo.si_errno << " "
-      //   << siginfo.si_code << " " << siginfo.si_pid << " " 
-      //   << siginfo.si_uid << " " << siginfo.si_status << " " 
-      //   << siginfo.si_value.sival_int << " " << siginfo.si_int << endl << endl;
-      // long current_rip = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RIP, 0);
-      // if (WSTOPSIG(*status) != SIGTRAP && last_rip == current_rip) {
-      //   cout << "[" << pid << "] Killed." << endl;
-      //   *status = WSTOPSIG(*status);
-      //   kill(pid, SIGKILL);
-      //   return 0;
-      // }
-      // last_rip = current_rip;
-      cout << "[" << pid << "] program stop with unknown sig " << strsignal(WSTOPSIG(*status)) << "(" << WSTOPSIG(*status) << ")" << endl;
-      ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(*status));
+      cout << "[" << pid << "] program stop with unknown sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+      ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(status));
       continue;
     }
   }
 
-  cerr << "-----------------------------" << endl;
-
+  cerr << "-----------------------------" << pid << endl;
   return 1;
 }
 
@@ -171,8 +159,11 @@ int start_trace(int pid) {
   while(info){
     info->ref->join();
     cout << "[-------] thread debugging *" << info->pid << "* exited." << endl;
+    cout << "time: " << (int) (info->usage.ru_utime.tv_sec * 1000 +
+                                  info->usage.ru_utime.tv_usec / 1000) << ", ";
+    cout << "memory: " << info->usage.ru_maxrss << endl;
     info = info->next;
-  }
+  } 
 
   return 0;
 }
