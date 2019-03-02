@@ -1,14 +1,17 @@
 anysandbox
 
-lang spec: 内存时间限制，安全函数， 编译命令行 
+lang spec: 内存时间限制增幅，安全等级，编译命令行
 
-OJ 与 系统对接样例
+自定义文件模式：
+将 MACRO 变为 runtime var，生成 BPF 结构，加载自定义沙箱代码
+
+例如：
 
 系统调用拦截模式
 
 STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX -> CUSTOM
 
-支持单线程、多线程(多进程)的拦截模式 最多追踪 3 线程?
+文件读取、写入、重新启动、网络访问
 
 线程追踪结构，输出锁 std::this_thread::get_id()
 等待所有线程完成
@@ -16,7 +19,9 @@ STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX -> CUSTOM
 bpf 关注想要关注的系统调用
 https://www.freebsd.org/cgi/man.cgi?query=bpf
 
-缺点：不能对多进程进行追踪
+https://github.com/google/google-ctf/blob/master/2017/finals/2017-finals-misc-jail1/util.h
+
+缺点：不能对多进程进行追踪，不能对误报系统调用进行调试
 
 按照第x个参数是路径的 分类系统调用
 
@@ -31,13 +36,14 @@ https://www.alfonsobeato.net/c/filter-and-modify-system-calls-with-seccomp-and-p
 当前已有系统存在的问题
 
 可能的威胁模型，介绍
-设计对应的安全模型、多线程多进程，防御对策，介绍
-方案：创建销毁 Docker、拦截系统调用（慢）、使用 libseccomp （限制多）、使用 BPF
+可能的防御对策，介绍
+目前已有解决方案  及其优缺点
+方案：jail 和 chroot，拦截系统调用（复杂）、使用 libseccomp （限制多）、使用 BPF、创建销毁 Docker（效率低）
+设计对应的安全模型（优势：多线程、多进程、多核心、支持文件读写沙箱、可自定义配置、不依赖客户机，迁移性好）
 对威胁的拦截能力验证，正常程序误报率
-与目前已有解决方案对比
+与目前已有解决方案对比，重点解决的内容
 对应的性能评测指标，与创建销毁 Docker 对比、单纯拦截系统调用对比、libseccomp 对比性能情况验证与优劣势分析
+实用性举例：与支持任意语言的 OnlineJudge 对接、与 QEMU 协作提供跨指令集支持
 
-对其他新的安全环境、跨指令集的构建执行支持
-Docker 与 QEMU 的协作执行
 
 http://www.linux-kongress.org/2009/slides/system_call_tracing_overhead_joerg_zinke.pdf

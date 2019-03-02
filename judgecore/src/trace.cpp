@@ -38,8 +38,6 @@ struct THREAD_INFO {
   int status;
   THREAD_INFO* next;
   THREAD_INFO() {
-    pid = 0;
-    ref = nullptr;
     next = nullptr;
   }
 };
@@ -69,7 +67,8 @@ int trace_thread(int pid, THREAD_INFO* info) {
   while (pid == wait4(pid, &status, 0, &usage))
   {
     if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) 
-      || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))) {
+      || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))
+      || status>>8 == (SIGTRAP | (PTRACE_EVENT_VFORK<<8))) {
 
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
@@ -129,7 +128,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
     }
     else
     {
-      cout << "[" << pid << "] program stop with unknown sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+      cout << "[" << pid << "] program reveived sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
       ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(status));
       continue;
     }
@@ -163,6 +162,7 @@ int start_trace(int pid) {
                                   info->usage.ru_utime.tv_usec / 1000) << ", ";
     cout << "memory: " << info->usage.ru_maxrss << endl;
     info = info->next;
+    // delete
   } 
 
   return 0;
@@ -174,6 +174,8 @@ int main(int argc, char** argv) {
   initialize(syscall_name);
   int pid;
   if ((pid = fork()) == 0) {
+    setuid(99);
+    setgid(99);
     ptrace(PTRACE_TRACEME, 0, 0, 0);
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
       perror("prctl(PR_SET_NO_NEW_PRIVS)");
