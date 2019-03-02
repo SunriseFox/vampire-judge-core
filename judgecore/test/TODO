@@ -1,3 +1,7 @@
+论文太长... 要那么长嘛
+都是些无用的介绍
+题目似乎比较简单
+
 anysandbox
 
 lang spec: 内存时间限制增幅，安全等级，编译命令行
@@ -11,7 +15,7 @@ lang spec: 内存时间限制增幅，安全等级，编译命令行
 
 STRICT_SAFE -> ALMOST_SAFE -> BESTEFFORT_SANDBOX -> CUSTOM
 
-文件读取、写入、重新启动、网络访问
+尝试：文件读取、写入、重新启动、网络访问
 
 线程追踪结构，输出锁 std::this_thread::get_id()
 等待所有线程完成

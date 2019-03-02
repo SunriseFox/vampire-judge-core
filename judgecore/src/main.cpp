@@ -29,6 +29,8 @@
 #include <linux/seccomp.h>
 #include <sys/prctl.h>
 
+#include "includes/syscall.h"
+
 #include "json.hpp"
 using json = nlohmann::json;
 
@@ -767,7 +769,8 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
-      cout << "[" << pid << "] cloned process " << child_pid << endl;
+      if (debug)
+        cout << "[" << pid << "] cloned process " << child_pid << endl;
       if (!child_pid) {
         cerr << "failed clone process" << endl;
         return -1;
@@ -819,6 +822,11 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       if (debug)
         cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
+      
+      if ( validate_syscall(pid, orig_eax) ) {
+        cerr << "[" << pid << "] syscall denied by validator" << endl;
+        kill(pid, SIGSYS);
+      }
 
       while ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {

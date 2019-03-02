@@ -76,7 +76,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
-      cout << "[" << pid << "] cloned process " << child_pid << endl;
+        cout << "[" << pid << "] cloned process " << child_pid << endl;
       if (!child_pid) {
         cerr << "failed clone process" << endl;
         return -1;
