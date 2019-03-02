@@ -1,11 +1,11 @@
 {
   "pid": 1001,
-  "max_time": 10000,
+  "max_time": 1000,
   "max_time_total": 30000,
-  "max_memory": 655300,
+  "max_memory": 6553,
   "max_output": 10000000,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 1,
-  "spj_mode": "no",
+  "spj_mode": "interactive",
   "spj_exec": null
 }

@@ -56,11 +56,15 @@ int trace_thread(int pid, THREAD_INFO* info) {
     perror("while attach");
     return -1;
   }
-  if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
-    perror("set options");
+  kill(pid, SIGSTOP);
 
-  if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
-    perror("start tracing child");
+  if (pid == waitpid(pid, &status, WSTOPPED)) {
+    if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
+      perror("set options");
+
+    if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
+      perror("start tracing child");
+  }
 
   cout << "[" << pid << "] start tracing" << endl;
 
@@ -81,10 +85,10 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       kill(child_pid, SIGSTOP);
 
-      if (waitpid(child_pid, &status, WSTOPPED))
+      if (waitpid(child_pid, &status, WSTOPPED) < 0)
         perror("while waitpid");
       
-      if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
+      if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP) < 0)
         perror("while detach");
 
       g_tail_mutex.lock();
@@ -117,7 +121,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
       // syscall number
       orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
       eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RAX, NULL);
-      cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
+      // cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
 
       if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {
@@ -128,7 +132,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
     }
     else
     {
-      cout << "[" << pid << "] program reveived sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+      // cout << "[" << pid << "] program reveived sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
       ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(status));
       continue;
     }

@@ -5,6 +5,10 @@
 #include <string>
 #include <map>
 #include <thread>
+#include <cstdlib>
+#include <chrono>
+#include <mutex>
+#include <thread>
 
 #include <signal.h>
 #include <unistd.h>
@@ -37,6 +41,19 @@ enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PYTHON, LANG_GO, LANG
 enum SPJ_MODE {SPJ_NO = 0, SPJ_COMPARE, SPJ_INTERACTIVE};
 enum SECCOMP_POLICY {POLICY_STRICT_SAFE = 0, POLICY_ALLOW_COMMON, POLICY_BESTEFFORT_SANDBOX, POLICY_CUSTOM};
 
+struct THREAD_INFO {
+  int pid;
+  rusage usage;
+  thread* ref;
+  int time;
+  int memory;
+  int status;
+  THREAD_INFO* next;
+  THREAD_INFO() {
+    next = nullptr;
+  }
+};
+
 int pid_to_kill = -1;
 int lpipe[2], rpipe[2];
 int r;
@@ -49,6 +66,8 @@ json result;
 
 map<string, string> path;
 map <int, string> syscall_name;
+std::mutex g_tail_mutex;
+THREAD_INFO *tail = nullptr, *info = nullptr;
 
 void close_pipe()
 {
@@ -73,8 +92,19 @@ void set_write()
 }
 
 void kill_timeout (int) {
-  cerr << "killing " << pid_to_kill << " for sleeping too long" << endl;
-  kill(pid_to_kill, SIGKILL);
+  THREAD_INFO *head = info;
+  do {
+    if (pid_to_kill > 0) {
+      kill(pid_to_kill, SIGKILL);
+      cerr << "killed " << pid_to_kill << " for sleeping too long" << endl;
+    }
+    if (head) {
+      pid_to_kill = head->pid;
+      head = head->next;
+    } else {
+      break;
+    }
+  } while(true) ;
 }
 
 int create_folder(string& path) {
@@ -372,7 +402,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
 int compile_exec_c (json& j) {
   if (debug) 
     cout << "language is c" << endl;
-  string compile_command = "gcc -DONLINE_JUDGE -O2 -static -std=c11 -fno-asm -Wall -Wextra -o "
+  string compile_command = "gcc -DONLINE_JUDGE -lpthread -O2 -static -std=c11 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
           + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
@@ -381,7 +411,7 @@ int compile_exec_c (json& j) {
 int compile_exec_cpp (json& j) {
   if (debug) 
     cout << "language is cpp" << endl;
-  string compile_command = "g++ -DONLINE_JUDGE -O2 -static -std=c++14 -fno-asm -Wall -Wextra -o "
+  string compile_command = "g++ -DONLINE_JUDGE -pthread -O2 -static -std=c++14 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
           + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
@@ -492,170 +522,293 @@ int generate_exec_args (json& j) {
   return -1;
 }
 
-int load_seccomp_child(SECCOMP_POLICY level, const std::initializer_list<string>& exes) {
+// int load_seccomp_child(SECCOMP_POLICY level, const std::initializer_list<string>& exes) {
+//   setuid(99);
+//   setgid(99);
+//   nice(10);
+
+//   if (level == POLICY_STRICT_SAFE) {
+//     struct sock_filter filter[] = {
+//       BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_sched_getaffinity, 36, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_arch_prctl, 35, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_execve, 34, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit, 33, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_read, 32, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_write, 31, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 30, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_brk, 29, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 28, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_geteuid, 27, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getegid, 26, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getppid, 25, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgrp, 24, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrlimit, 23, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrusage, 22, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 21, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_sigaltstack, 20, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_readlink, 19, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_mmap, 18, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_munmap, 17, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_uname, 16, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgid, 15, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_stat, 14, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lstat, 13, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fstat, 12, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 11, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 10, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 9, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getresuid, 8, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents, 7, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents64, 6, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fcntl, 5, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_ioctl, 4, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lseek, 3, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit_group, 2, 0),
+//       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_rt_sigaction, 1, 0),
+//       BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_TRACE),
+//       BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
+//     };
+//     struct sock_fprog prog = {
+//       .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
+//       .filter = filter,
+//     };
+//     ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);  
+//     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1)
+//     {
+//       perror("prctl(PR_SET_NO_NEW_PRIVS)");
+//       return 1;
+//     }
+//     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == -1)
+//     {
+//       perror("when setting seccomp filter");
+//       return 1;
+//     }
+//     kill(0, SIGSTOP);
+//     return 0;
+//   }
+
+//   if (level != POLICY_CUSTOM) {
+//     cerr << "unknown secure policy" << endl;
+//     return -1;
+//   }
+
+//   ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);
+//   return 0;
+// }
+
+// int load_seccomp_parent(const int& pid, SECCOMP_POLICY level, int& status, rusage& usage) {
+//   int orig_eax, eax, r;
+
+//   if (pid != wait4(pid, &status, 0, &usage))
+//   {
+//     kill(pid, SIGKILL);
+//     cerr << "wait for child failed" << endl;
+//     return 1;
+//   }
+
+//   if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
+//     perror("set options");
+
+//   if (level == POLICY_STRICT_SAFE) {
+//     ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESECCOMP);
+//     while (true)
+//     {
+//       ptrace(PTRACE_CONT, pid, 0, 0);
+//       if (pid != wait4(pid, &status, 0, &usage))
+//       {
+//         kill(pid, SIGKILL);
+//         cerr << "continue wait for child failed" << endl;
+//         return 1;
+//       }
+
+//       if (WIFEXITED(status))
+//         return 0;
+//       if (status >> 8 == (SIGTRAP | (PTRAVE_EVENT_SECCOMP << 8))) {
+//         if (debug) {
+//           int syscallno = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, 0);
+//           cout << "got illegal syscall " << syscall_name[syscallno] << "(" << syscallno << ")" << endl;
+//           result["extra"] = string("illegal syscall ") + syscall_name[syscallno] + "(" + to_string(syscallno) + ")";
+//         }
+//         status = SIGSYS;
+//         kill(pid, SIGKILL);
+//         return 0;
+//       } else {
+//         cout << "pass down stopsig " << WSTOPSIG(status) << endl;
+//         status = WSTOPSIG(status);
+//         kill(pid, SIGKILL);
+//         return 0;
+//       }
+//     }
+//   }
+  
+//   if (level != POLICY_CUSTOM) {
+//     cerr << "unknown secure policy" << endl;
+//     return -1;
+//   }
+
+//   if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
+//     perror("start tracing child");
+//   cout << "start tracing " << pid << endl;
+
+//   long last_rip = 0;
+
+//   while (pid == wait4(pid, &status, 0, &usage))
+//   {
+//     if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))) {
+//       long child_pid;
+//       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
+//       cout << "got cloned process " << child_pid << endl;
+//       ptrace(PTRACE_SYSCALL, pid, 0, 0);
+//       if (waitpid(child_pid, &status, WSTOPPED))
+//         perror("while waitpid");
+//       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
+//         perror("while detach");
+//       new std::thread([=]() {
+//         int child_status;
+//         rusage child_usage;
+//         if (ptrace(PTRACE_SEIZE, child_pid, NULL, NULL)) 
+//           perror("while attach");
+//         load_seccomp_parent(child_pid, level, child_status, child_usage);
+//       });
+//       continue;
+//     }
+//     if (WIFSIGNALED(status))
+//     {
+//       kill(pid, SIGKILL);
+//       cout << "user program terminated by system signal " << WTERMSIG(status) << endl;
+//       break;
+//     }
+
+//     if (WIFEXITED(status))
+//     {
+//       kill(pid, SIGKILL);
+//       cout << "user program exited normally" << endl;
+//       cout << "status: " << WEXITSTATUS(status) << endl;
+//       break;
+//     }
+
+//     if (WSTOPSIG(status) & 0x80)
+//     {
+//       // syscall number
+//       orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
+//       eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RAX, NULL);
+//       cout << "[" << to_string(pid) << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
+
+//       if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+//       {
+//         cout << "failed to continue from breakpoint" << endl;
+//         kill(pid, SIGKILL);
+//         return -1;
+//       }
+//     }
+//     else
+//     {
+//       long current_rip = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RIP, 0);
+//       if (WSTOPSIG(status) != SIGTRAP && last_rip == current_rip){
+//         status = WSTOPSIG(status);
+//         kill(pid, SIGKILL);
+//         return 0;
+//       }
+//       last_rip = current_rip;
+//       cout << "program stop with unknown sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+//       ptrace(PTRACE_SYSCALL, pid, 0, 0);
+//       continue;
+//     }
+//   }
+
+//   cerr << "end tracing " << pid << " unexpectedly" << endl;
+//   return -1;
+// }
+
+int load_seccomp_tracee() {
   setuid(99);
   setgid(99);
   nice(10);
-
-  if (level == POLICY_STRICT_SAFE) {
-    struct sock_filter filter[] = {
-      BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_sched_getaffinity, 36, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_arch_prctl, 35, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_execve, 34, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit, 33, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_read, 32, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_write, 31, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 30, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_brk, 29, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 28, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_geteuid, 27, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getegid, 26, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getppid, 25, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgrp, 24, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrlimit, 23, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrusage, 22, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 21, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_sigaltstack, 20, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_readlink, 19, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_mmap, 18, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_munmap, 17, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_uname, 16, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgid, 15, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_stat, 14, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lstat, 13, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fstat, 12, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 11, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 10, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 9, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getresuid, 8, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents, 7, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents64, 6, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fcntl, 5, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_ioctl, 4, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lseek, 3, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit_group, 2, 0),
-      BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_rt_sigaction, 1, 0),
-      BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_TRACE),
-      BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
-    };
-    struct sock_fprog prog = {
-      .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
-      .filter = filter,
-    };
-    ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);  
-    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1)
-    {
-      perror("prctl(PR_SET_NO_NEW_PRIVS)");
-      return 1;
-    }
-    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == -1)
-    {
-      perror("when setting seccomp filter");
-      return 1;
-    }
-    kill(0, SIGSTOP);
-    return 0;
-  }
-
-  if (level != POLICY_CUSTOM) {
-    cerr << "unknown secure policy" << endl;
+  ptrace(PTRACE_TRACEME, 0, 0, 0);
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
+    perror("prctl(PR_SET_NO_NEW_PRIVS)");
     return -1;
   }
-
-  ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);
   return 0;
 }
 
-int load_seccomp_parent(const int& pid, SECCOMP_POLICY level, int& status, rusage& usage) {
+int trace_thread(int pid, THREAD_INFO* info) {
+  if (debug)
+    cout << "[" << pid << "] prepare tracing" << endl;
   int orig_eax, eax, r;
+  int& status = info->status;
+  rusage& usage = info->usage;
 
-  if (pid != wait4(pid, &status, 0, &usage))
-  {
-    kill(pid, SIGKILL);
-    cerr << "wait for child failed" << endl;
-    return 1;
-  }
-
-  if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
-    perror("set options");
-
-  if (level == POLICY_STRICT_SAFE) {
-    ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESECCOMP);
-    while (true)
-    {
-      ptrace(PTRACE_CONT, pid, 0, 0);
-      if (pid != wait4(pid, &status, 0, &usage))
-      {
-        kill(pid, SIGKILL);
-        cerr << "continue wait for child failed" << endl;
-        return 1;
-      }
-
-      if (WIFEXITED(status))
-        return 0;
-      if (status >> 8 == (SIGTRAP | (PTRAVE_EVENT_SECCOMP << 8))) {
-        if (debug) {
-          int syscallno = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, 0);
-          cout << "got illegal syscall " << syscall_name[syscallno] << "(" << syscallno << ")" << endl;
-          result["extra"] = string("illegal syscall ") + syscall_name[syscallno] + "(" + to_string(syscallno) + ")";
-        }
-        status = SIGSYS;
-        kill(pid, SIGKILL);
-        return 0;
-      } else {
-        cout << "pass down stopsig " << WSTOPSIG(status) << endl;
-        status = WSTOPSIG(status);
-        kill(pid, SIGKILL);
-        return 0;
-      }
-    }
-  }
-  
-  if (level != POLICY_CUSTOM) {
-    cerr << "unknown secure policy" << endl;
+  if (ptrace(PTRACE_SEIZE, pid, NULL, NULL)) {
+    perror("while attach");
     return -1;
   }
 
-  if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
-    perror("start tracing child");
-  cout << "start tracing " << pid << endl;
+  kill(pid, SIGSTOP);
 
-  long last_rip = 0;
+  if (pid == waitpid(pid, &status, WSTOPPED)) {
+    if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
+      perror("set options");
+
+    if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
+      perror("start tracing child");
+  } else {    
+    kill(pid, SIGKILL);
+    cerr << "[" << pid << "] attach failed, kill it" << endl;
+    return -1;
+  }
 
   while (pid == wait4(pid, &status, 0, &usage))
   {
-    if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))) {
+    if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) 
+      || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))
+      || status>>8 == (SIGTRAP | (PTRACE_EVENT_VFORK<<8))) {
+
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
-      cout << "got cloned process " << child_pid << endl;
+      cout << "[" << pid << "] cloned process " << child_pid << endl;
+      if (!child_pid) {
+        cerr << "failed clone process" << endl;
+        return -1;
+      }
       ptrace(PTRACE_SYSCALL, pid, 0, 0);
-      if (waitpid(child_pid, &status, WSTOPPED))
+
+      kill(child_pid, SIGSTOP);
+
+      if (waitpid(child_pid, &status, WSTOPPED) < 0)
         perror("while waitpid");
-      if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
+      
+      if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP) < 0)
         perror("while detach");
-      new std::thread([=]() {
-        int child_status;
-        rusage child_usage;
-        if (ptrace(PTRACE_SEIZE, child_pid, NULL, NULL)) 
-          perror("while attach");
-        load_seccomp_parent(child_pid, level, child_status, child_usage);
-      });
+
+      g_tail_mutex.lock();
+        
+      THREAD_INFO* next = new THREAD_INFO;
+      tail = tail->next = next;
+      next->ref = new std::thread(trace_thread, child_pid, tail);
+      next->pid = child_pid;
+
+      g_tail_mutex.unlock();
       continue;
     }
+
     if (WIFSIGNALED(status))
     {
       kill(pid, SIGKILL);
-      cout << "user program terminated by system signal " << WTERMSIG(status) << endl;
-      break;
-    }
+      if (debug)
+        cout << "[" << pid << "] user program terminated by system signal " << WTERMSIG(status) << endl;
+      return 0;
+    } 
 
     if (WIFEXITED(status))
     {
-      kill(pid, SIGKILL);
-      cout << "user program exited normally" << endl;
-      cout << "status: " << WEXITSTATUS(status) << endl;
-      break;
+      kill(pid, SIGKILL);      
+      if (debug) {
+        cout << "[" << pid << "] user program exited normally" << endl;
+        cout << "[" << pid << "] status: " << WEXITSTATUS(status) << endl;
+      }
+      return 0;
     }
 
     if (WSTOPSIG(status) & 0x80)
@@ -663,32 +816,86 @@ int load_seccomp_parent(const int& pid, SECCOMP_POLICY level, int& status, rusag
       // syscall number
       orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
       eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RAX, NULL);
-      cout << "[" << to_string(pid) << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
 
-      if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+      if (debug)
+        cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
+
+      while ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {
-        cout << "failed to continue from breakpoint" << endl;
+        cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
         return -1;
       }
     }
     else
     {
-      long current_rip = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * RIP, 0);
-      if (WSTOPSIG(status) != SIGTRAP && last_rip == current_rip){
-        status = WSTOPSIG(status);
-        kill(pid, SIGKILL);
-        return 0;
-      }
-      last_rip = current_rip;
-      cout << "program stop with unknown sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
-      ptrace(PTRACE_SYSCALL, pid, 0, 0);
+      if (debug)
+        cout << "[" << pid << "] program reveived sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
+      ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(status));
       continue;
     }
   }
 
-  cerr << "end tracing " << pid << " unexpectedly" << endl;
+  cerr << "-----------------------------" << pid << endl;
   return -1;
+}
+
+struct JUDGE_RESULT {
+  int status;
+  int time;
+  int memory; 
+  JUDGE_RESULT() {
+    status = 0;
+    time = 0;
+    memory = 0;
+  }
+};
+
+int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
+  info = tail = new THREAD_INFO;
+  int status;
+
+  if (pid != waitpid(pid, &status, 0))
+  {
+    kill(pid, SIGKILL);
+    cerr << "wait for child failed" << endl;
+    return -1;
+  }
+
+  if (ptrace(PTRACE_DETACH, pid, NULL, (void *) SIGSTOP)) 
+    perror("while detach");
+
+  info->ref = new std::thread(trace_thread, pid, info);
+  info->pid = pid;
+
+  THREAD_INFO* head = info;
+
+  while(head){
+    info->ref->join();
+    int time = (int) (info->usage.ru_utime.tv_sec * 1000 + info->usage.ru_utime.tv_usec / 1000);
+    result.time += time;
+    result.memory += info->usage.ru_maxrss;
+    if (result.status == 0 && info->status != 0 && WSTOPSIG(info->status) != 133) 
+      result.status = info->status;
+    if (debug) {
+      cout << "[-------] thread debugging *" << info->pid << "* exited." << endl;
+      cout << "time: " << time << ", ";
+      cout << "memory: " << info->usage.ru_maxrss << endl;
+      if (info->status != 0 && WSTOPSIG(info->status) != 133) {
+        cout << "WIFEXITED: " << WIFEXITED(info->status) << endl;
+        cout << "WEXITSTATUS: " << WEXITSTATUS(info->status) << endl;
+        cout << "WIFSIGNALED: " << WIFSIGNALED(info->status) << endl;
+        cout << "WTERMSIG: " << WTERMSIG(info->status) << endl;
+        cout << "WIFSTOPPED: " << WIFSTOPPED(info->status) << endl;
+        cout << "WSTOPSIG: " << WSTOPSIG(info->status) << endl;
+      }
+    }
+    head = info->next;
+    delete info;
+    info = head;
+  }
+
+  return 0;
 }
 
 bool should_continue(json &j, RESULT r)
@@ -760,6 +967,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   return SW;
 }
 
+// TODO: sometimes not work?
 int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
   rlimit rlimits;
 
@@ -796,7 +1004,7 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
   return 0;
 }
 
-int do_test(json& j) {
+void do_test(json& j) {
   int time_limit = j["max_time"].get<int>();
   int total_time_limit = j["max_time_total"].get<int>();
   int memory_limit = j["max_memory"].get<int>();
@@ -879,10 +1087,7 @@ int do_test(json& j) {
         
         set_write();
 
-        if((r = load_seccomp_child(POLICY_STRICT_SAFE, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
-          cerr << "load seccomp rule failed" << endl;
-          _exit(255);
-        };
+        load_seccomp_tracee();
 
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
 
@@ -893,15 +1098,12 @@ int do_test(json& j) {
       // interactive parent continues here
       close_pipe();
 
-      int status;
-      struct rusage resource_usage;
-
-      pid_to_kill = b_pid;
+      JUDGE_RESULT jresult;
       
       alarm(time_limit / 1000 + 10);
       signal(SIGALRM, kill_timeout);
 
-      if (wait4(b_pid, &status, WSTOPPED, &resource_usage) == -1) {
+      if (load_seccomp_tracer(b_pid, jresult) == -1) {
         kill(b_pid, SIGKILL);
         kill(a_pid, SIGKILL);
         cerr << "wait on child process failed" << endl;
@@ -915,19 +1117,18 @@ int do_test(json& j) {
 
       json r;
 
-      if (WIFSIGNALED(status)) {
+      if (WIFSIGNALED(jresult.status)) {
         if (debug) 
-          cout << "user program is signaled: " << status << endl;
-        r["signal"] = case_result.signal = WTERMSIG(status);
-        r["signal_str"] = string(strsignal(WTERMSIG(status)));
+          cout << "user program is signaled: " << jresult.status << endl;
+        r["signal"] = case_result.signal = WTERMSIG(jresult.status);
+        r["signal_str"] = string(strsignal(WTERMSIG(jresult.status)));
       } else {
         case_result.signal = 0;
       }
 
-      r["exitcode"] = case_result.exitcode = WEXITSTATUS(status);
-      r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
-                                  resource_usage.ru_utime.tv_usec / 1000);
-      r["memory"] = case_result.memory = resource_usage.ru_maxrss;
+      r["exitcode"] = case_result.exitcode = WEXITSTATUS(jresult.status);
+      r["time"] = case_result.time = jresult.time;
+      r["memory"] = case_result.memory = jresult.memory;
 
       RESULT rs = AC;
       if (case_result.signal) {
@@ -952,7 +1153,9 @@ int do_test(json& j) {
         alarm(5);
         signal(SIGALRM, kill_timeout);
 
-        if (wait4(a_pid, &status, WSTOPPED, &resource_usage) == -1) {
+        int status;
+
+        if (waitpid(a_pid, &status, WSTOPPED) == -1) {
           kill(a_pid, SIGKILL);
           cerr << "wait on child process failed" << endl;
           finish(SW);
@@ -1000,7 +1203,6 @@ int do_test(json& j) {
       }
 
       if (pid == 0) { // non interactive child
-
         set_resource_limit(time_limit, memory_limit, output_limit);  
 
         if (debug) {
@@ -1016,12 +1218,12 @@ int do_test(json& j) {
           fclose(file_in);
           fclose(file_out);
           cerr << "failed to redirect input & output." << endl;
-          _exit(255);
+          exit(255);
         }
 
-        if((r = load_seccomp_child(POLICY_CUSTOM, {path["exec"], "/opt/rh/rh-python36/root/usr/bin/python3", "/usr/bin/cat", "/usr/bin/node"}))) {
+        if((r = load_seccomp_tracee())) {
           cerr << "load seccomp rule failed" << endl;
-          _exit(255);
+          exit(255);
         };
 
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
@@ -1030,36 +1232,33 @@ int do_test(json& j) {
         fclose(file_out);
 
         cerr << "exec failed" << endl;
-        _exit(255);
+        exit(255);
       } 
       // non interactive parent continues here
-      int status;
-      struct rusage resource_usage;
-
-      pid_to_kill = pid;
 
       alarm(time_limit / 1000 + 5);
       signal(SIGALRM, kill_timeout);
-      
-      load_seccomp_parent(pid, POLICY_CUSTOM, status, resource_usage);
+
+      JUDGE_RESULT jresult;
+            
+      load_seccomp_tracer(pid, jresult);
 
       alarm(0);
 
       json r;
 
-      if (WIFSIGNALED(status)) {
+      if (WIFSIGNALED(jresult.status)) {
         if (debug) 
-          cout << "user program is signaled: " << status << endl;
-        r["signal"] = case_result.signal = WTERMSIG(status);
-        r["signal_str"] = string(strsignal(WTERMSIG(status)));
+          cout << "user program is signaled: " << jresult.status << endl;
+        r["signal"] = case_result.signal = WTERMSIG(jresult.status);
+        r["signal_str"] = string(strsignal(WTERMSIG(jresult.status)));
       } else {
         case_result.signal = 0;
       }
 
-      r["exitcode"] = case_result.exitcode = WEXITSTATUS(status);
-      r["time"] = case_result.time = (int) (resource_usage.ru_utime.tv_sec * 1000 +
-                                  resource_usage.ru_utime.tv_usec / 1000);
-      r["memory"] = case_result.memory = resource_usage.ru_maxrss;
+      r["exitcode"] = case_result.exitcode = WEXITSTATUS(jresult.status);
+      r["time"] = case_result.time = jresult.time;
+      r["memory"] = case_result.memory = jresult.memory;
 
       RESULT rs;
       if (case_result.signal) {
@@ -1122,7 +1321,6 @@ int do_test(json& j) {
   finish(AC);
 
   cerr << "should not" << endl;
-  return -1;
 }
 
 #include "syscall_name.hpp"
@@ -1131,13 +1329,12 @@ int main (int argc, char** argv) {
   initialize(syscall_name);
 
   json j;
-  int r;
 
-  if ((r = read_config(argc, argv, j)))
-    _exit(255);
+  if (read_config(argc, argv, j))
+    exit(255);
 
-  if ((r = validate_config(j)))
-    _exit(255);
+  if (validate_config(j))
+    exit(255);
 
   string pid = to_string(j["pid"].get<int>());
   string sid = to_string(j["sid"].get<int>());
@@ -1181,14 +1378,13 @@ int main (int argc, char** argv) {
   result["extra"] = {};
 
   // compile source or check syntax
-  if((r = generate_exec_args(j)))
-    _exit(255);
+  if(generate_exec_args(j))
+    exit(255);
   
   // do test
 
-  if((r = do_test(j)))
-    _exit(255);
+  do_test(j);
 
   // should not
-  _exit(254);
+  exit(254);
 }
