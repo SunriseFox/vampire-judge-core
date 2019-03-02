@@ -25,7 +25,7 @@
 
 enum OP {
   GREATER, EQUAL, LESS, TEST, MASK, SET,
-  STARTSWITH, ENDSWITH, CONTAINS,
+  STARTSWITH, ENDSWITH, CONTAINS, EXACT,
   PREPEND, APPEND, REPLACE,
   LOG, LOGSTR
 };
@@ -56,7 +56,7 @@ int str_ends_with(const char *str, const char *suf) {
 }
 void str_prepend(char *str, const char *pre) {
   int slen = strlen(str);
-  int tlen = strlen(str);
+  int tlen = strlen(pre);
 
   for (int i = slen; i >= 0; i--) {
     str[i + tlen] = str[i];
@@ -86,7 +86,7 @@ inline int peek_user(int pid, long addr, char* result) {
     addr += sizeof(long);
 
     p = (char *)&val;
-    for (i = 0; i < sizeof(long); ++i, ++result)
+    for (i = 0; i < (int)sizeof(long); ++i, ++result)
     {
       *result = *p++;
       if (*result == '\0')
@@ -109,7 +109,7 @@ inline int poke_user(int pid, long where, char* str) {
     int i;
     char val[sizeof(long)];
 
-    for (i = 0; i < sizeof(long); ++i, ++str)
+    for (i = 0; i < (int)sizeof(long); ++i, ++str)
     {
       val[i] = *str;
       if (*str == '\0')
@@ -137,81 +137,91 @@ int check(int pid, int where, int op, ...) {
   char* char_arg;
 
   static char buf[5000];
+  int ret = 0;
 
   switch (op) {
   case GREATER: 
     int_arg = va_arg(ap, int);
-    va_end(ap); 
-    return regvar > int_arg;
+    ret = regvar > int_arg;
+    break;
   case EQUAL:
     int_arg = va_arg(ap, int);
-    va_end(ap); 
-    return regvar == int_arg;
+    ret =  regvar == int_arg;
+    break;
   case LESS:
     int_arg = va_arg(ap, int);
-    va_end(ap); 
-    return regvar < int_arg;
+    ret =  regvar < int_arg;
+    break;
   case TEST:
     int_arg = va_arg(ap, int);
-    va_end(ap); 
-    return regvar & int_arg;
+    ret =  regvar & int_arg;
+    break;
   case MASK:
     int_arg = va_arg(ap, int);
-    va_end(ap); 
     regvar = regvar & int_arg;
-    return ptrace(PTRACE_POKEUSER, pid, sizeof(long) * get_register(where), regvar) == 0;
+    ret =  ptrace(PTRACE_POKEUSER, pid, sizeof(long) * get_register(where), regvar) == 0;
+    break;
   case SET:
     int_arg = va_arg(ap, int);
-    va_end(ap); 
     regvar = regvar | int_arg;
-    return ptrace(PTRACE_POKEUSER, pid, sizeof(long) * get_register(where), regvar) == 0;
+    ret =  ptrace(PTRACE_POKEUSER, pid, sizeof(long) * get_register(where), regvar) == 0;
+    break;
   case STARTSWITH:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     if (peek_user(pid, regvar, buf) < 0) return -1;
-    return str_starts_with(buf, char_arg);
+    ret =  str_starts_with(buf, char_arg);
+    break;
   case ENDSWITH:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     if (peek_user(pid, regvar, buf) < 0) return -1;
-    return str_ends_with(buf, char_arg);
+    ret =  str_ends_with(buf, char_arg);
+    break;
   case CONTAINS:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     if (peek_user(pid, regvar, buf) < 0) return -1;
-    return strstr(buf, char_arg) != NULL;
+    ret =  strstr(buf, char_arg) != NULL;
+    break;
+  case EXACT:
+    char_arg = va_arg(ap, char*);
+    if (peek_user(pid, regvar, buf) < 0) return -1;
+    ret =  strcmp(buf, char_arg) == 0;
+    break;
   case PREPEND:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     if (peek_user(pid, regvar, buf) < 0) return -1;
     str_prepend(buf, char_arg);
     poke_user(pid, where, buf);
-    return 0;
+    ret =  0;
+    break;
   case APPEND:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     if (peek_user(pid, regvar, buf) < 0) return -1;
     str_append(buf, char_arg);
     poke_user(pid, where, buf);
-    return 0;
+    ret =  0;
+    break;
   case REPLACE:
     char_arg = va_arg(ap, char*);
-    va_end(ap); 
     poke_user(pid, where, char_arg);
-    return 0;
+    ret =  0;
+    break;
   case LOG:
     *va_arg(ap, int*) = regvar;
     va_end(ap);
-    return 0;
+    ret =  0;
+    break;
   case LOGSTR:
     char_arg = va_arg(ap, char*);
     va_end(ap);
     peek_user(pid, regvar, char_arg);
-    return 0;
+    ret =  0;
+    break;
   default:
     break;
   }
-  return 0;
+
+  va_end(ap); 
+  return ret;
 }
 
 
@@ -231,10 +241,17 @@ int validate_syscall (int pid, int syscall) {
 
   #ifdef __NR_open // 2
     case __NR_open: 
-      check(pid, 1, LOG, buf);
-      printf("%s", buf);
+      check(pid, 1, LOGSTR, buf);
       if (check(pid, 2, TEST, O_WRONLY) || check(pid, 2, TEST, O_RDWR)) {
+        if (check(pid, 1, EXACT, "/dev/tty")) {   
+          printf("%s - TTY", buf);       
+          return ALLOW;
+        }
+        check(pid, 1, PREPEND, "/tmp/");
+        printf("%s - RW", buf);
         return ALLOW;
+      } else {
+        printf("%s - R", buf);
       }
       return ALLOW;
   #endif
@@ -1296,15 +1313,15 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_readlinkat // 2
-    case __NR_readlinkat: return DENY;
+    case __NR_readlinkat: return ALLOW;
   #endif
 
   #ifdef __NR_fchmodat // 2
-    case __NR_fchmodat: return DENY;
+    case __NR_fchmodat: return ALLOW;
   #endif
 
   #ifdef __NR_faccessat // 2
-    case __NR_faccessat: return DENY;
+    case __NR_faccessat: return ALLOW;
   #endif
 
   #ifdef __NR_pselect6 // 1

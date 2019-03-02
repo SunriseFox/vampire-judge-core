@@ -70,6 +70,7 @@ map<string, string> path;
 map <int, string> syscall_name;
 std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
+int process_forked = 0;
 
 void close_pipe()
 {
@@ -360,6 +361,43 @@ int validate_config(json& j) {
   return error;
 }
 
+// TODO: sometimes not work?
+int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
+  rlimit rlimits;
+
+  rlimits.rlim_cur = time_limit / 1000 + 1;
+  rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
+  if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
+    cerr << "set cpu time limit failed, " << r << endl;
+    _exit(255);
+  }
+
+  if (language != LANG_JAVASCRIPT) {
+    rlimits.rlim_cur = memory_limit * 1024 * 2;
+    rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
+    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
+      cerr << "set memory limit failed, " << r << endl;
+      _exit(255);
+    }
+  } else {
+    rlimits.rlim_cur = 0x7fffffff;
+    rlimits.rlim_max = 0x7fffffff;
+    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
+      cerr << "set memory limit failed, " << r << endl;
+      _exit(255);
+    }
+  }
+
+  rlimits.rlim_cur = output_limit;
+  rlimits.rlim_max = output_limit * 2;
+  if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
+    cerr << "set output limit failed, " << r << endl;
+    _exit(255);
+  }
+
+  return 0;
+}
+
 int comile_c_cpp(json& j, const string& compile_command) {
   UNUSED(j);
   if (debug) 
@@ -367,34 +405,35 @@ int comile_c_cpp(json& j, const string& compile_command) {
 
   pid_t pid = fork();
   if(pid == -1) {
-      cerr << "fork complier process failed" << endl;
-      return -1;
+    cerr << "fork complier process failed" << endl;
+    return -1;
   }
   if(pid == 0) {
-      alarm(10);
-      signal(SIGALRM, [](int){exit(-1);});
-      int ret = system(compile_command.c_str ());
-      unsigned int sec = 10 - alarm(0);
-      if (debug)
-        cout << "compile time is " << sec << " seconds" << endl;
-      if(WIFEXITED(ret))
-          exit(WEXITSTATUS(ret));
-      raise(WTERMSIG(ret));
+    set_resource_limit(7, 204800, 52428800);
+    alarm(10);
+    signal(SIGALRM, [](int){exit(-1);});
+    int ret = system(compile_command.c_str ());
+    unsigned int sec = 10 - alarm(0);
+    if (debug)
+      cout << "compile time is " << sec << " seconds" << endl;
+    if(WIFEXITED(ret))
+        exit(WEXITSTATUS(ret));
+    raise(WTERMSIG(ret));
   } else {
-      int status;
-      wait(&status);
-      if(!WIFEXITED(status)) {
-          cerr << "compiler process killed by sig " << WTERMSIG(status) << endl;
-          return WTERMSIG(status);
-      }
-      status = WEXITSTATUS(status);
-      if (debug)
-        cout << "compiler return code is : " << status << endl;
-      result["compiler"] = readFile(path["cmpinfo"]);
-      if(status != 0) {
-        finish (CE);
-      }
-      return 0;
+    int status;
+    wait(&status);
+    if(!WIFEXITED(status)) {
+        cerr << "compiler process killed by sig " << WTERMSIG(status) << endl;
+        return WTERMSIG(status);
+    }
+    status = WEXITSTATUS(status);
+    if (debug)
+      cout << "compiler return code is : " << status << endl;
+    result["compiler"] = readFile(path["cmpinfo"]);
+    if(status != 0) {
+      finish (CE);
+    }
+    return 0;
   }
   // should not
   raise(SIGSYS);
@@ -769,14 +808,23 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       long child_pid;
       ptrace(PTRACE_GETEVENTMSG, pid, NULL, &child_pid);
+
       if (debug)
         cout << "[" << pid << "] cloned process " << child_pid << endl;
       if (!child_pid) {
+        kill(pid, SIGKILL);
         cerr << "failed clone process" << endl;
         return -1;
       }
+      if (process_forked > 4) {
+        kill(pid, SIGKILL);
+        kill(child_pid, SIGKILL);
+        cerr << "[" << pid << "] killed as forking too many children" << endl;
+        return -1;
+      }
+      process_forked++;
       ptrace(PTRACE_SYSCALL, pid, 0, 0);
-
+      
       kill(child_pid, SIGSTOP);
 
       if (waitpid(child_pid, &status, WSTOPPED) < 0)
@@ -823,11 +871,13 @@ int trace_thread(int pid, THREAD_INFO* info) {
       if (debug)
         cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
       
-      if ( validate_syscall(pid, orig_eax) ) {
-        cerr << "[" << pid << "] syscall denied by validator" << endl;
+      if ( validate_syscall(pid, orig_eax) ) 
+      {
+        cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
         ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
-        kill(pid, SIGSYS);
-      } else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+        ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), SIGSYS);
+      } 
+      else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1) 
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
@@ -972,43 +1022,6 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
     return WA;
   }
   return SW;
-}
-
-// TODO: sometimes not work?
-int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
-  rlimit rlimits;
-
-  rlimits.rlim_cur = time_limit / 1000 + 1;
-  rlimits.rlim_max = min(time_limit / 1000 * 2 + 1, time_limit / 1000 + 4);
-  if ((r = setrlimit(RLIMIT_CPU, &rlimits))) {
-    cerr << "set cpu time limit failed, " << r << endl;
-    _exit(255);
-  }
-
-  if (language != LANG_JAVASCRIPT) {
-    rlimits.rlim_cur = memory_limit * 1024 * 2;
-    rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-      cerr << "set memory limit failed, " << r << endl;
-      _exit(255);
-    }
-  } else {
-    rlimits.rlim_cur = 0x7fffffff;
-    rlimits.rlim_max = 0x7fffffff;
-    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-      cerr << "set memory limit failed, " << r << endl;
-      _exit(255);
-    }
-  }
-
-  rlimits.rlim_cur = output_limit;
-  rlimits.rlim_max = output_limit * 2;
-  if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
-    cerr << "set output limit failed, " << r << endl;
-    _exit(255);
-  }
-
-  return 0;
 }
 
 void do_test(json& j) {
