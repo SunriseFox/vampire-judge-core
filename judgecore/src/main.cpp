@@ -825,10 +825,9 @@ int trace_thread(int pid, THREAD_INFO* info) {
       
       if ( validate_syscall(pid, orig_eax) ) {
         cerr << "[" << pid << "] syscall denied by validator" << endl;
+        ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
         kill(pid, SIGSYS);
-      }
-
-      while ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+      } else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);

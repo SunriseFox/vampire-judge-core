@@ -1099,8 +1099,8 @@ int validate_syscall (int pid, int syscall) {
     case __NR_getdents64: return ALLOW;
   #endif
 
-  #ifdef __NR_set_tid_address // 2
-    case __NR_set_tid_address: return DENY;
+  #ifdef __NR_set_tid_address // 1
+    case __NR_set_tid_address: return ALLOW;
   #endif
 
   #ifdef __NR_restart_syscall // 1

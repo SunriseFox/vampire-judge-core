@@ -6,6 +6,6 @@
   "max_output": 10000000,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 1,
-  "spj_mode": "interactive",
+  "spj_mode": "no",
   "spj_exec": null
 }
