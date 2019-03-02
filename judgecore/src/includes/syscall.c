@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <sys/user.h>
 #include <sys/prctl.h>
@@ -309,7 +310,8 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_ioctl // 3
-    case __NR_ioctl: return DENY;
+    // TODO: why python need this?
+    case __NR_ioctl: return ALLOW;
   #endif
 
   #ifdef __NR_pread64 // 0
@@ -409,11 +411,14 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_socket // 2 maybe used by unix socket
-    case __NR_socket: return DENY;
+    case __NR_socket: 
+      if (check(pid, 1, EQUAL, AF_UNIX)) 
+        return ALLOW;
+      return DENY;
   #endif
 
   #ifdef __NR_connect // 2
-    case __NR_connect: return DENY;
+    case __NR_connect: return ALLOW;
   #endif
 
   #ifdef __NR_accept // 3
@@ -556,8 +561,8 @@ int validate_syscall (int pid, int syscall) {
     case __NR_ftruncate: return ALLOW;
   #endif
 
-  #ifdef __NR_getdents // 2 should not be called by user
-    case __NR_getdents: return DENY;
+  #ifdef __NR_getdents // 2 should not be called by user [EXCEPT python]
+    case __NR_getdents: return ALLOW;
   #endif
 
   #ifdef __NR_getcwd // 0
@@ -1273,7 +1278,20 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_openat // 2
-    case __NR_openat: return DENY;
+    case __NR_openat: 
+      check(pid, 2, LOGSTR, buf);
+      if (check(pid, 3, TEST, O_WRONLY) || check(pid, 3, TEST, O_RDWR)) {
+        if (check(pid, 2, EXACT, "/dev/tty")) {   
+          printf("%s - TTY", buf);       
+          return ALLOW;
+        }
+        check(pid, 2, PREPEND, "/tmp/");
+        printf("%s - RW", buf);
+        return ALLOW;
+      } else {
+        printf("%s - R", buf);
+      }
+      return ALLOW;
   #endif
 
   #ifdef __NR_mkdirat // 2
