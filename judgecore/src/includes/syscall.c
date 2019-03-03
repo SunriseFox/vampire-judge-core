@@ -130,7 +130,7 @@ inline int poke_user(int pid, long where, char* str) {
 int check(int pid, int where, int op, ...) {
   long regvar
     = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * get_register(where), 0);
-  
+
   va_list ap;
   va_start(ap, op);
 
@@ -141,7 +141,7 @@ int check(int pid, int where, int op, ...) {
   int ret = 0;
 
   switch (op) {
-  case GREATER: 
+  case GREATER:
     int_arg = va_arg(ap, int);
     ret = regvar > int_arg;
     break;
@@ -221,10 +221,11 @@ int check(int pid, int where, int op, ...) {
     break;
   }
 
-  va_end(ap); 
+  va_end(ap);
   return ret;
 }
 
+extern bool debug;
 
 int validate_syscall (int pid, int syscall) {
   // 0 1 2 3
@@ -241,18 +242,21 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_open // 2
-    case __NR_open: 
+    case __NR_open:
       check(pid, 1, LOGSTR, buf);
       if (check(pid, 2, TEST, O_WRONLY) || check(pid, 2, TEST, O_RDWR)) {
-        if (check(pid, 1, EXACT, "/dev/tty")) {   
-          printf("%s - TTY", buf);       
+        if (check(pid, 1, EXACT, "/dev/tty")) {
+          if (debug)
+            printf("%s - TTY\n", buf);
           return ALLOW;
         }
         check(pid, 1, PREPEND, "/tmp/");
-        printf("%s - RW", buf);
+        if (debug)
+          printf("%s - RW\n", buf);
         return ALLOW;
       } else {
-        printf("%s - R", buf);
+        if (debug)
+          printf("%s - R\n", buf);
       }
       return ALLOW;
   #endif
@@ -411,8 +415,8 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_socket // 2 maybe used by unix socket
-    case __NR_socket: 
-      if (check(pid, 1, EQUAL, AF_UNIX)) 
+    case __NR_socket:
+      if (check(pid, 1, EQUAL, AF_UNIX))
         return ALLOW;
       return DENY;
   #endif
@@ -1278,18 +1282,21 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_openat // 2
-    case __NR_openat: 
+    case __NR_openat:
       check(pid, 2, LOGSTR, buf);
       if (check(pid, 3, TEST, O_WRONLY) || check(pid, 3, TEST, O_RDWR)) {
-        if (check(pid, 2, EXACT, "/dev/tty")) {   
-          printf("%s - TTY", buf);       
+        if (check(pid, 2, EXACT, "/dev/tty")) {
+          if (debug)
+            printf("%s - TTY\n", buf);
           return ALLOW;
         }
         check(pid, 2, PREPEND, "/tmp/");
-        printf("%s - RW", buf);
+        if (debug)
+          printf("%s - RW\n", buf);
         return ALLOW;
       } else {
-        printf("%s - R", buf);
+        if (debug)
+          printf("%s - R\n", buf);
       }
       return ALLOW;
   #endif

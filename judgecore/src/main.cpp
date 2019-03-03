@@ -86,7 +86,7 @@ void set_read()
   dup2(lpipe[1], STDOUT_FILENO);
   close_pipe();
 }
-  
+
 void set_write()
 {
   dup2(lpipe[0], STDIN_FILENO);
@@ -152,7 +152,7 @@ string getStatusText(RESULT what) {
       break;
     case CE:
       return "compile error";
-    case RE: 
+    case RE:
       return "runtime error";
     case TE:
       return "time limit exceed";
@@ -178,7 +178,7 @@ int finish(RESULT what) {
   result["result"] = getStatusText(what);
   ofstream of(path["result"]);
   of << (debug ? setw(2) : setw(0)) << result << endl;
-  if (debug) 
+  if (debug)
     cout << setw(2) << result << endl;
   _exit(0);
 }
@@ -238,8 +238,8 @@ int validate_config(json& j) {
 
   if (debug)
     cout << "validating configuration" << endl;
-  
-  if (!j["pid"].is_number_integer() 
+
+  if (!j["pid"].is_number_integer()
     || j["pid"].get<int>() < -1) {
     cerr << "pid is not an integer" << endl;
     error = 1;
@@ -265,7 +265,7 @@ int validate_config(json& j) {
     if (debug)
       cout << "max time is null, default to 1000ms" << endl;
     j["max_time"] = 1000;
-  } else if (!j["max_time"].is_number_integer() 
+  } else if (!j["max_time"].is_number_integer()
     || j["max_time"].get<int>() < 0) {
     cerr << "max time is not an integer" << endl;
     error = 1;
@@ -275,17 +275,17 @@ int validate_config(json& j) {
     if (debug)
       cout << "max time total is null, default to 30000ms" << endl;
     j["max_time_total"] = 30000;
-  } else if (!j["max_time_total"].is_number_integer() 
+  } else if (!j["max_time_total"].is_number_integer()
     || j["max_time_total"].get<int>() < 0) {
     cerr << "max time total is not an integer" << endl;
     error = 1;
-  } 
+  }
 
   if (j["max_memory"].is_null()) {
     if (debug)
       cout << "max memory is null, default to 65535KB" << endl;
     j["max_memory"] = 65535;
-  } else if (!j["max_memory"].is_number_integer() 
+  } else if (!j["max_memory"].is_number_integer()
     || j["max_memory"].get<int>() < 0) {
     cerr << "max memory is not an integer" << endl;
     error = 1;
@@ -295,13 +295,13 @@ int validate_config(json& j) {
     if (debug)
       cout << "max output is null, default to 10000KB" << endl;
     j["max_output"] = 10000;
-  } else if (!j["max_output"].is_number_integer() 
+  } else if (!j["max_output"].is_number_integer()
     || j["max_output"].get<int>() < 0) {
     cerr << "max_output is not integer number" << endl;
     error = 1;
   }
-  
-  if (!j["test_case_count"].is_number_integer() 
+
+  if (!j["test_case_count"].is_number_integer()
     || j["test_case_count"].get<int>() < -1) {
     cerr << "test case count is not acceptable" << endl;
     error = 1;
@@ -400,8 +400,8 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
 
 int comile_c_cpp(json& j, const string& compile_command) {
   UNUSED(j);
-  if (debug) 
-    cout << "compiler command: " << compile_command << endl;    
+  if (debug)
+    cout << "compiler command: " << compile_command << endl;
 
   pid_t pid = fork();
   if(pid == -1) {
@@ -441,7 +441,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
 }
 
 int compile_exec_c (json& j) {
-  if (debug) 
+  if (debug)
     cout << "language is c" << endl;
   string compile_command = "gcc -DONLINE_JUDGE -lpthread -O2 -static -std=c11 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
@@ -450,7 +450,7 @@ int compile_exec_c (json& j) {
 }
 
 int compile_exec_cpp (json& j) {
-  if (debug) 
+  if (debug)
     cout << "language is cpp" << endl;
   string compile_command = "g++ -DONLINE_JUDGE -pthread -O2 -static -std=c++14 -fno-asm -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
@@ -459,7 +459,7 @@ int compile_exec_cpp (json& j) {
 }
 
 int compile_exec_javascript (json& j) {
-  if (debug) 
+  if (debug)
     cout << "language is javascript, skip compile" << endl;
   ofstream script(path["exec"] + ".nodejs");
   string s = R"+(const readline = require('readline');
@@ -498,10 +498,10 @@ process.on('unhandledRejection', (reason, p) => {
 )+"
 + readFile(path["code"]) +
 R"+(
-})().then(() => process.exit(0)))+";  
+})().then(() => process.exit(0)))+";
   script << s << endl;
   script.close();
-  
+
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
   exec << "exec node --no-warnings --max-old-space-size=" + to_string(j["max_memory"].get<int>() / 4000) + " " + path["exec"] + ".nodejs" << endl;
@@ -528,7 +528,7 @@ int compile_exec_python (json& j) {
 }
 
 int compile_exec_go (json& j) {
-  string compile_command = "go build -o " + path["exec"] 
+  string compile_command = "go build -o " + path["exec"]
           + " " + path["code"] + " >" + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
 }
@@ -614,7 +614,7 @@ int generate_exec_args (json& j) {
 //       .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
 //       .filter = filter,
 //     };
-//     ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);  
+//     ptrace(PTRACE_TRACEME, 0, (void *)(0x1), 0);
 //     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1)
 //     {
 //       perror("prctl(PR_SET_NO_NEW_PRIVS)");
@@ -682,7 +682,7 @@ int generate_exec_args (json& j) {
 //       }
 //     }
 //   }
-  
+
 //   if (level != POLICY_CUSTOM) {
 //     cerr << "unknown secure policy" << endl;
 //     return -1;
@@ -703,12 +703,12 @@ int generate_exec_args (json& j) {
 //       ptrace(PTRACE_SYSCALL, pid, 0, 0);
 //       if (waitpid(child_pid, &status, WSTOPPED))
 //         perror("while waitpid");
-//       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP)) 
+//       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP))
 //         perror("while detach");
 //       new std::thread([=]() {
 //         int child_status;
 //         rusage child_usage;
-//         if (ptrace(PTRACE_SEIZE, child_pid, NULL, NULL)) 
+//         if (ptrace(PTRACE_SEIZE, child_pid, NULL, NULL))
 //           perror("while attach");
 //         load_seccomp_parent(child_pid, level, child_status, child_usage);
 //       });
@@ -794,7 +794,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
     if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
       perror("start tracing child");
-  } else {    
+  } else {
     kill(pid, SIGKILL);
     cerr << "[" << pid << "] attach failed, kill it" << endl;
     return -1;
@@ -802,7 +802,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
   while (pid == wait4(pid, &status, 0, &usage))
   {
-    if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)) 
+    if (status>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8))
       || status>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8))
       || status>>8 == (SIGTRAP | (PTRACE_EVENT_VFORK<<8))) {
 
@@ -824,17 +824,17 @@ int trace_thread(int pid, THREAD_INFO* info) {
       }
       process_forked++;
       ptrace(PTRACE_SYSCALL, pid, 0, 0);
-      
+
       kill(child_pid, SIGSTOP);
 
       if (waitpid(child_pid, &status, WSTOPPED) < 0)
         perror("while waitpid");
-      
+
       if (ptrace(PTRACE_DETACH, child_pid, NULL, (void *) SIGSTOP) < 0)
         perror("while detach");
 
       g_tail_mutex.lock();
-        
+
       THREAD_INFO* next = new THREAD_INFO;
       tail = tail->next = next;
       next->ref = new std::thread(trace_thread, child_pid, tail);
@@ -850,11 +850,11 @@ int trace_thread(int pid, THREAD_INFO* info) {
       if (debug)
         cout << "[" << pid << "] user program terminated by system signal " << WTERMSIG(status) << endl;
       return 0;
-    } 
+    }
 
     if (WIFEXITED(status))
     {
-      kill(pid, SIGKILL);      
+      kill(pid, SIGKILL);
       if (debug) {
         cout << "[" << pid << "] user program exited normally" << endl;
         cout << "[" << pid << "] status: " << WEXITSTATUS(status) << endl;
@@ -870,14 +870,14 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       if (debug)
         cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
-      
-      if ( validate_syscall(pid, orig_eax) ) 
+
+      if ( eax == -38 && validate_syscall(pid, orig_eax) )
       {
         cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
         ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
         ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), SIGSYS);
-      } 
-      else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1) 
+      }
+      else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
@@ -900,7 +900,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
 struct JUDGE_RESULT {
   int status;
   int time;
-  int memory; 
+  int memory;
   JUDGE_RESULT() {
     status = 0;
     time = 0;
@@ -919,7 +919,7 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
     return -1;
   }
 
-  if (ptrace(PTRACE_DETACH, pid, NULL, (void *) SIGSTOP)) 
+  if (ptrace(PTRACE_DETACH, pid, NULL, (void *) SIGSTOP))
     perror("while detach");
 
   info->ref = new std::thread(trace_thread, pid, info);
@@ -932,7 +932,7 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
     int time = (int) (info->usage.ru_utime.tv_sec * 1000 + info->usage.ru_utime.tv_usec / 1000);
     result.time += time;
     result.memory += info->usage.ru_maxrss;
-    if (result.status == 0 && info->status != 0 && WSTOPSIG(info->status) != 133) 
+    if (result.status == 0 && info->status != 0 && WSTOPSIG(info->status) != 133)
       result.status = info->status;
     if (debug) {
       cout << "[-------] thread debugging *" << info->pid << "* exited." << endl;
@@ -981,8 +981,8 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   UNUSED(j);
   if (spj_mode == SPJ_COMPARE) {
     // should do spj
-    string spjcmd = path.at("spj") + " " + extra.at("stdin") + " " 
-      + extra.at("stdout") + " " + extra.at("output") 
+    string spjcmd = path.at("spj") + " " + extra.at("stdin") + " "
+      + extra.at("stdout") + " " + extra.at("output")
       + " >" + extra.at("log") + " 2>&1";
     if (debug)
       cout << "special judge command: " << spjcmd << endl;
@@ -994,13 +994,13 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
         case 0: return AC;
         case 1: return PE;
         case 2: return WA;
-        default: 
+        default:
           cerr << "[warn] special judge returned unknown status" << endl;
           return SW;
       }
     }
     cerr << "special judge program is signaled" << endl;
-    return SW; 
+    return SW;
   } else {
     string difcmd = string("diff --strip-trailing-cr --brief ") + extra.at("stdout") + " " + extra.at("output") + " >" + extra.at("log");
     if (debug)
@@ -1104,7 +1104,7 @@ void do_test(json& j) {
         if (debug) {
           cout << "execution begin" << endl;
         }
-        
+
         set_write();
 
         load_seccomp_tracee();
@@ -1119,7 +1119,7 @@ void do_test(json& j) {
       close_pipe();
 
       JUDGE_RESULT jresult;
-      
+
       alarm(time_limit / 1000 + 10);
       signal(SIGALRM, kill_timeout);
 
@@ -1138,7 +1138,7 @@ void do_test(json& j) {
       json r;
 
       if (WIFSIGNALED(jresult.status)) {
-        if (debug) 
+        if (debug)
           cout << "user program is signaled: " << jresult.status << endl;
         r["signal"] = case_result.signal = WTERMSIG(jresult.status);
         r["signal_str"] = string(strsignal(WTERMSIG(jresult.status)));
@@ -1166,7 +1166,7 @@ void do_test(json& j) {
         rs = TE;
       } else if (case_result.memory > memory_limit){
         rs = ME;
-      } 
+      }
       if (rs == AC) {
         // respect result from special judge
         pid_to_kill = a_pid;
@@ -1223,7 +1223,7 @@ void do_test(json& j) {
       }
 
       if (pid == 0) { // non interactive child
-        set_resource_limit(time_limit, memory_limit, output_limit);  
+        set_resource_limit(time_limit, memory_limit, output_limit);
 
         if (debug) {
           cout << "execution begin" << endl;
@@ -1253,14 +1253,14 @@ void do_test(json& j) {
 
         cerr << "exec failed" << endl;
         exit(255);
-      } 
+      }
       // non interactive parent continues here
 
       alarm(time_limit / 1000 + 5);
       signal(SIGALRM, kill_timeout);
 
       JUDGE_RESULT jresult;
-            
+
       load_seccomp_tracer(pid, jresult);
 
       alarm(0);
@@ -1268,7 +1268,7 @@ void do_test(json& j) {
       json r;
 
       if (WIFSIGNALED(jresult.status)) {
-        if (debug) 
+        if (debug)
           cout << "user program is signaled: " << jresult.status << endl;
         r["signal"] = case_result.signal = WTERMSIG(jresult.status);
         r["signal_str"] = string(strsignal(WTERMSIG(jresult.status)));
@@ -1324,7 +1324,7 @@ void do_test(json& j) {
 
   if (fatal_status != AC)
     finish(fatal_status);
-  
+
   if (total_time > total_time_limit) {
     finish(TE);
   } else if (max_memory > memory_limit) {
@@ -1377,7 +1377,7 @@ int main (int argc, char** argv) {
   path["result"] = path["output"] + "/result.json";
 
   path["code"] = path["base"] + "/code/" + pid + "/" + sid + "/" + j["filename"].get<string>();
-  
+
   path["exec"] = path["temp"] + "/main";
   unlink(path["exec"].c_str());
   ofstream(path["exec"]).close();
@@ -1400,7 +1400,7 @@ int main (int argc, char** argv) {
   // compile source or check syntax
   if(generate_exec_args(j))
     exit(255);
-  
+
   // do test
 
   do_test(j);
