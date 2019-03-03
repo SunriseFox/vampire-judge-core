@@ -9,6 +9,7 @@
 #include <chrono>
 #include <mutex>
 #include <thread>
+#include <random>
 
 #include <signal.h>
 #include <unistd.h>
@@ -71,6 +72,25 @@ map <int, string> syscall_name;
 std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
 int process_forked = 0;
+
+std::mt19937 rng(std::random_device{}());
+
+std::string random_string( size_t length )
+{
+    auto randchar = []() -> char
+    {
+        const char charset[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+        const size_t max_index = (sizeof(charset) - 1);
+        std::uniform_int_distribution<> dist(0, max_index - 1);
+        return charset[ dist(rng) ];
+    };
+    std::string str(length,0);
+    std::generate_n( str.begin(), length, randchar );
+    return str;
+}
 
 void close_pipe()
 {
@@ -982,7 +1002,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   if (spj_mode == SPJ_COMPARE) {
     // should do spj
     string spjcmd = path.at("spj") + " " + extra.at("stdin") + " "
-      + extra.at("stdout") + " " + extra.at("output")
+      + extra.at("stdout") + " " + extra.at("output") + " " + path.at("sandbox")
       + " >" + extra.at("log") + " 2>&1";
     if (debug)
       cout << "special judge command: " << spjcmd << endl;
@@ -1084,6 +1104,7 @@ void do_test(json& j) {
           , extra["stdin"].c_str()
           , extra["stdout"].c_str()
           , extra["log"].c_str()
+          , path.at("sandbox").c_str()
           , nullptr
         );
 
@@ -1364,6 +1385,7 @@ int main (int argc, char** argv) {
   path["temp"] = "/tmp/judge-" + pid + "-" + sid + "/";
   delete_file(path["temp"]);
   create_folder(path["temp"]);
+  chmod(path["temp"].c_str(), S_IRWXG|S_IRWXU|S_IXOTH|S_IWOTH);
 
   path["output"] = path["base"] + "/result/" + pid + "/" + sid + "/";
   create_folder(path["output"]);
@@ -1388,6 +1410,10 @@ int main (int argc, char** argv) {
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());
+
+  path["sandbox"] = path["temp"] + "/sandbox" + random_string(6) + "/";
+  mkdir(path["sandbox"].c_str(), 0777);
+  chown(path["sandbox"].c_str(), 99, 99);
 
   result["time"] = 0;
   result["memory"] = 0;

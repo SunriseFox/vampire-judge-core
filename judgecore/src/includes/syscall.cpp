@@ -15,10 +15,13 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <linux/unistd.h>
+
 #include <stdarg.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
+#include <cstring>
+#include <iostream>
+#include <map>
+
+using namespace std;
 
 #define ALLOW 0
 #define TRACE 1
@@ -28,7 +31,7 @@ enum OP {
   GREATER, EQUAL, LESS, TEST, MASK, SET,
   STARTSWITH, ENDSWITH, CONTAINS, EXACT,
   PREPEND, APPEND, REPLACE,
-  LOG, LOGSTR
+  QUERY, QUERYSTR
 };
 
 inline int get_register(int where) {
@@ -206,12 +209,12 @@ int check(int pid, int where, int op, ...) {
     poke_user(pid, where, char_arg);
     ret =  0;
     break;
-  case LOG:
+  case QUERY:
     *va_arg(ap, int*) = regvar;
     va_end(ap);
     ret =  0;
     break;
-  case LOGSTR:
+  case QUERYSTR:
     char_arg = va_arg(ap, char*);
     va_end(ap);
     peek_user(pid, regvar, char_arg);
@@ -226,6 +229,7 @@ int check(int pid, int where, int op, ...) {
 }
 
 extern bool debug;
+extern map<string, string> path;
 
 int validate_syscall (int pid, int syscall) {
   // 0 1 2 3
@@ -243,20 +247,21 @@ int validate_syscall (int pid, int syscall) {
 
   #ifdef __NR_open // 2
     case __NR_open:
-      check(pid, 1, LOGSTR, buf);
+      check(pid, 1, QUERYSTR, buf);
       if (check(pid, 2, TEST, O_WRONLY) || check(pid, 2, TEST, O_RDWR)) {
         if (check(pid, 1, EXACT, "/dev/tty")) {
           if (debug)
-            printf("%s - TTY\n", buf);
+            cout << "[" << pid << "] " << buf << " - TTY" << endl;
           return ALLOW;
         }
-        check(pid, 1, PREPEND, "/tmp/");
+        str_prepend(buf, path["sandbox"].c_str());
+        check(pid, 1, REPLACE, buf);
         if (debug)
-          printf("%s - RW\n", buf);
+          cout << "[" << pid << "] " << buf << " - RW" << endl;
         return ALLOW;
       } else {
         if (debug)
-          printf("%s - R\n", buf);
+          cout << "[" << pid << "] " << buf << " - R" << endl;
       }
       return ALLOW;
   #endif
@@ -1283,20 +1288,21 @@ int validate_syscall (int pid, int syscall) {
 
   #ifdef __NR_openat // 2
     case __NR_openat:
-      check(pid, 2, LOGSTR, buf);
+      check(pid, 2, QUERYSTR, buf);
       if (check(pid, 3, TEST, O_WRONLY) || check(pid, 3, TEST, O_RDWR)) {
         if (check(pid, 2, EXACT, "/dev/tty")) {
           if (debug)
-            printf("%s - TTY\n", buf);
+            cout << "[" << pid << "] " << buf << " - TTY" << endl;
           return ALLOW;
         }
-        check(pid, 2, PREPEND, "/tmp/");
+        str_prepend(buf, path["sandbox"].c_str());
+        check(pid, 2, REPLACE, buf);
         if (debug)
-          printf("%s - RW\n", buf);
+          cout << "[" << pid << "] " << buf << " - RW" << endl;
         return ALLOW;
       } else {
         if (debug)
-          printf("%s - R\n", buf);
+          cout << "[" << pid << "] " << buf << " - R" << endl;
       }
       return ALLOW;
   #endif
