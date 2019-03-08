@@ -5,8 +5,8 @@
   "max_output": 10000000,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 1,
-  "spj_mode": "compare",
+  "spj_mode": "no",
   "path": {
-    "spj": "/mnt/data/judge/1001"
+    "spj": null
   }
 }

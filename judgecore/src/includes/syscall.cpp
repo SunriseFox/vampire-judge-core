@@ -69,6 +69,35 @@ void str_prepend(char *str, const char *pre) {
     str[i] = pre[i];
   }
 }
+void str_prepend_path_safe(char *str, const char *pre) {
+  int slen = strlen(str);
+  int tlen = strlen(pre);
+
+  char* buf = new char[slen + 1];
+  memcpy(buf, str, slen + 1);
+
+  int i = 0, j = 0;
+  bool lastCharIsDot = false;
+  for (; i < tlen; i++) {
+    str[i] = pre[i];
+  }
+  while(buf[j] == '\\' || buf[j] == '/' || buf[j] == '.') j++;
+  while(buf[j]) {
+    if (buf[j] == '.') {
+      if (lastCharIsDot) {
+        j++;
+        continue;
+      }
+      lastCharIsDot = true;
+    } else {
+      lastCharIsDot = false;
+    }
+    str[i++] = buf[j++];
+  }
+  str[i] = '\0';
+
+  delete buf;
+}
 void str_append(char *str, const char *pre) {
   int slen = strlen(str);
   for (int i = 0; ; i++) {
@@ -254,7 +283,7 @@ int validate_syscall (int pid, int syscall) {
             cout << "[" << pid << "] " << buf << " - TTY" << endl;
           return ALLOW;
         }
-        str_prepend(buf, path["sandbox"].c_str());
+        str_prepend_path_safe(buf, path["sandbox"].c_str());
         check(pid, 1, REPLACE, buf);
         if (debug)
           cout << "[" << pid << "] " << buf << " - RW" << endl;
@@ -1295,7 +1324,7 @@ int validate_syscall (int pid, int syscall) {
             cout << "[" << pid << "] " << buf << " - TTY" << endl;
           return ALLOW;
         }
-        str_prepend(buf, path["sandbox"].c_str());
+        str_prepend_path_safe(buf, path["sandbox"].c_str());
         check(pid, 2, REPLACE, buf);
         if (debug)
           cout << "[" << pid << "] " << buf << " - RW" << endl;
