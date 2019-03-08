@@ -16,6 +16,7 @@
 #include <sys/syscall.h>
 
 #include <fcntl.h>
+#include <dirent.h>
 
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -25,6 +26,7 @@
 #include <sys/user.h>
 #include <sys/resource.h>
 #include <sys/reg.h>
+#include <sys/mount.h>
 
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -200,6 +202,8 @@ int finish(RESULT what) {
   of << (debug ? setw(2) : setw(0)) << result << endl;
   if (debug)
     cout << setw(2) << result << endl;
+  umount2(path["sandbox"].c_str(), MNT_FORCE);
+  rmdir(path["sandbox"].c_str());
   _exit(0);
 }
 
@@ -833,6 +837,7 @@ int load_seccomp_tracee() {
   setuid(99);
   setgid(99);
   nice(10);
+  chdir(path["sandbox"].c_str());
   ptrace(PTRACE_TRACEME, 0, 0, 0);
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
     perror("prctl(PR_SET_NO_NEW_PRIVS)");
@@ -1053,7 +1058,25 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       + " >" + extra.at("log") + " 2>&1";
     if (debug)
       cout << "special judge command: " << spjcmd << endl;
-    int status = system(spjcmd.c_str());
+    int pid = fork();
+    if (pid == 0) {
+      int fd = open(extra.at("log").c_str(), O_WRONLY);
+      dup2(fd, STDOUT_FILENO);
+      dup2(fd, STDERR_FILENO);
+      alarm(10);
+      execl (
+        path.at("spj").c_str(),
+        path.at("spj").c_str(),
+        extra.at("stdin").c_str(),
+        extra.at("stdout").c_str(),
+        extra.at("output").c_str(),
+        path.at("sandbox").c_str(),
+        NULL
+      );
+      exit(255);
+    }
+    int status;
+    wait(&status);
     if (debug)
       cout << "special judge returned: " << status << endl;
     if (WIFEXITED(status)) {
@@ -1156,7 +1179,7 @@ void do_test(json& j) {
         );
 
         cerr << "child process A exec failed" << endl;
-        _exit(255);
+        return;
       }
 
       // interactive parent continues here
@@ -1180,7 +1203,7 @@ void do_test(json& j) {
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
 
         cerr << "child process B exec failed" << endl;
-        _exit(255);
+        return;
       }
 
       // interactive parent continues here
@@ -1452,7 +1475,7 @@ int main (int argc, char** argv) {
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());
 
-  path["sandbox"] = path["temp"] + "/sandbox" + random_string(6) + "/";
+  path["sandbox"] = path["temp"] + "/sandbox-" + random_string(6) + "/";
   mkdir(path["sandbox"].c_str(), 0777);
   chown(path["sandbox"].c_str(), 99, 99);
 
@@ -1470,7 +1493,12 @@ int main (int argc, char** argv) {
 
   // do test
 
+  mount("none", path["sandbox"].c_str(), "tmpfs", MS_NOATIME |  MS_NODEV | MS_NODIRATIME | MS_NOEXEC | MS_NOSUID, "");
+
   do_test(j);
+
+  umount2(path["sandbox"].c_str(), MNT_FORCE);
+  rmdir(path["sandbox"].c_str());
 
   // should not
   exit(254);

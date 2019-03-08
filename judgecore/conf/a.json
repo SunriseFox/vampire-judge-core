@@ -1,13 +1,14 @@
 {
+  "sid": 10001,
   "filename": "main.cpp",
   "lang": "c++",
   "path": {
-    "base": "/mnt/data/",
-    "code": "/mnt/data/code/1001/10001/main.cpp",
-    "log": "/tmp/temp",
-    "output": "/tmp/temp",
-    "stdin": "/mnt/data/case/1001/",
-    "stdout": "/mnt/data/case/1001/",
-    "temp": "/tmp/temp"
+    "base": null,
+    "code": null,
+    "log": null,
+    "output": null,
+    "stdin": null,
+    "stdout": null,
+    "temp": null
   }
 }
