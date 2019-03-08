@@ -259,21 +259,61 @@ int validate_config(json& j) {
   if (debug)
     cout << "validating configuration" << endl;
 
-  if (!j["pid"].is_number_integer()
-    || j["pid"].get<int>() < -1) {
-    cerr << "pid is not an integer" << endl;
-    error = 1;
+  if (!j["path"].is_object()) {
+    j["path"] = {};
   }
 
-  if (!j["sid"].is_number_integer()
-    || j["sid"].get<int>() < -1) {
-    cerr << "sid is not an integer" << endl;
-    error = 1;
+  if (!j["path"]["base"].is_string()) {
+    if (debug)
+      cout << "base dir defaults to /mnt/data" << endl;
+    j["path"]["base"] = "/mnt/data";
   }
 
-  if (!j["filename"].is_string()) {
-    cerr << "filename is not a string" << endl;
-    error = 1;
+  string base = j["path"]["base"].get<string>();
+
+  string pid;
+  string sid;
+  string filename;
+
+  if (j["pid"].is_number_integer()
+    && j["pid"].get<int>() >= -1) {
+    pid = to_string(j["pid"].get<int>());
+  }
+
+  if (j["sid"].is_number_integer()
+    && j["sid"].get<int>() >= -1) {
+    sid = to_string(j["sid"].get<int>());
+  }
+
+  if (j["filename"].is_string()) {
+    filename = j["filename"].get<string>();
+  }
+
+  auto get_key = [&](string& key, const string& name)->string& {
+    if (key.empty()) {
+      error = 1;
+      cerr << name << " is not specified or not valid." << endl;
+    }
+    return key;
+  };
+
+  if (!j["path"]["temp"].is_string()) {
+    j["path"]["temp"] = "/tmp/judge-" + get_key(pid, "pid->temp") + "-" + get_key(sid, "sid->temp") + "/";
+  }
+  if (!j["path"]["output"].is_string()) {
+    j["path"]["output"] = base + "/result/" +  get_key(pid, "pid->output") + "/" + get_key(sid, "sid->output") + "/";
+  }
+  if (!j["path"]["stdin"].is_string()) {
+    j["path"]["stdin"] = base + "/case/" +  get_key(pid, "pid->stdin") + "/";
+  }
+  if (!j["path"]["stdout"].is_string()) {
+    j["path"]["stdout"] = j["path"]["stdin"];
+  }
+  if (!j["path"]["log"].is_string()) {
+    j["path"]["log"] = j["path"]["temp"];
+  }
+  if (!j["path"]["code"].is_string()) {
+    j["path"]["code"] = base + "/code/" +  get_key(pid, "pid->code") + "/" + get_key(sid, "sid->code") + "/" + get_key(filename, "filename->code");
   }
 
   if (!j["lang"].is_string() && !j["lang"].is_number_integer()) {
@@ -327,12 +367,6 @@ int validate_config(json& j) {
     error = 1;
   }
 
-  if (!j["base_dir"].is_string()) {
-    if (debug)
-      cout << "base dir defaults to /mnt/data" << endl;
-    j["base_dir"] = "/mnt/data";
-  }
-
   if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare")
     || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1)) {
     spj_mode = SPJ_COMPARE;
@@ -342,6 +376,14 @@ int validate_config(json& j) {
   } else {
     spj_mode = SPJ_NO;
   }
+
+  if (spj_mode != SPJ_NO) {
+    if (!j["path"]["spj"].is_string())
+      j["path"]["spj"] = base + "/judge/" +  get_key(pid, "pid->spj");
+  } else {
+    j["path"]["spj"] = "";
+  }
+
 
   if (j["lang"].is_string()) {
     string lang_str = j["lang"].get<string>();
@@ -377,6 +419,11 @@ int validate_config(json& j) {
         break;
     }
   }
+
+  if (debug)
+    cout << "configuration validated with code " << error << endl;
+
+  cout << setw(2) << j << endl;
 
   return error;
 }
@@ -1377,36 +1424,30 @@ int main (int argc, char** argv) {
   if (validate_config(j))
     exit(255);
 
-  string pid = to_string(j["pid"].get<int>());
-  string sid = to_string(j["sid"].get<int>());
-
-  path["base"] = j["base_dir"].get<string>();
-
-  path["temp"] = "/tmp/judge-" + pid + "-" + sid + "/";
+  path["temp"] = j["path"]["temp"].get<string>();
   delete_file(path["temp"]);
   create_folder(path["temp"]);
   chmod(path["temp"].c_str(), S_IRWXG|S_IRWXU|S_IXOTH|S_IWOTH);
 
-  path["output"] = path["base"] + "/result/" + pid + "/" + sid + "/";
+  path["output"] = j["path"]["output"].get<string>();
   create_folder(path["output"]);
 
-  path["stdin"] = path["base"] + "/case/" + pid +"/";
-  path["stdout"] = path["base"] + "/case/" + pid + "/";
+  path["stdin"] = j["path"]["stdin"].get<string>();
+  path["stdout"] = j["path"]["stdout"].get<string>();
 
-  path["log"] = path["temp"];
+  path["log"] = j["path"]["log"].get<string>();
 
   // Files
   path["result"] = path["output"] + "/result.json";
 
-  path["code"] = path["base"] + "/code/" + pid + "/" + sid + "/" + j["filename"].get<string>();
+  path["code"] = j["path"]["code"].get<string>();
 
   path["exec"] = path["temp"] + "/main";
   unlink(path["exec"].c_str());
   ofstream(path["exec"]).close();
   chmod(path["exec"].c_str(), S_IRWXG|S_IRWXU);
 
-  path["spj"] = path["base"] + "/judge/" + pid;
-  path["spj"] = j["spj_exec"].is_string() ? j["spj_exec"].get<string>() : path["spj"];
+  path["spj"] = j["path"]["spj"];
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());

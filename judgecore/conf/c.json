@@ -1,4 +1,6 @@
 {
-  "base_dir": "/mnt/data/",
-  "debug": true
+  "debug": true,
+  "path": {
+    "base": "/mnt/data/"
+  }
 }
