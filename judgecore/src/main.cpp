@@ -480,6 +480,10 @@ int comile_c_cpp(json& j, const string& compile_command) {
     return -1;
   }
   if(pid == 0) {
+    if(seteuid(99)) {
+      cerr << "set euid failed!" << endl;
+      return -1;
+    }
     set_resource_limit(7, 204800, 52428800);
     alarm(10);
     signal(SIGALRM, [](int){exit(-1);});
