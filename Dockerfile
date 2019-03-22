@@ -28,12 +28,11 @@ RUN yum -y install glibc-static
 
 # enable in path
 
-ADD source.sh /etc/profile.d/
+ENV PATH=/opt/rh/devtoolset-8/root/usr/bin:/opt/rh/rh-python36/root/usr/bin:$PATH
 
 WORKDIR /usr/bin/judgecore
 ADD judgecore /usr/bin/judgecore
 RUN set -ex; \
-    source /etc/profile.d/source.sh; \
     source /usr/bin/judgecore/compile.sh;
 
 # volume
