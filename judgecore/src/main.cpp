@@ -74,6 +74,7 @@ map <int, string> syscall_name;
 std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
 int process_forked = 0;
+int max_core = 4;
 
 std::mt19937 rng(std::random_device{}());
 
@@ -364,6 +365,18 @@ int validate_config(json& j) {
     cerr << "max_output is not integer number" << endl;
     error = 1;
   }
+
+  if (j["max_core"].is_null()) {
+    if (debug)
+      cout << "max core is null, default to 4" << endl;
+    j["max_core"] = 4;
+  } else if (!j["max_core"].is_number_integer()
+    || j["max_core"].get<int>() < 0) {
+    cerr << "max_core is not integer number" << endl;
+    error = 1;
+  }
+
+  max_core = j["max_core"].get<int>();
 
   if (!j["test_case_count"].is_number_integer()
     || j["test_case_count"].get<int>() < -1) {
@@ -892,9 +905,10 @@ int trace_thread(int pid, THREAD_INFO* info) {
         cerr << "failed clone process" << endl;
         return -1;
       }
-      if (process_forked > 4) {
+      if (process_forked > max_core) {
         kill(pid, SIGKILL);
         kill(child_pid, SIGKILL);
+        if (result["extra"].is_null()) result["extra"] = string("using more than ") + to_string(max_core) + " cores";
         cerr << "[" << pid << "] killed as forking too many children" << endl;
         return -1;
       }

@@ -35,6 +35,7 @@
   "max_time_total": 30000, // [30000]
   "max_memory": 65530, // [65530]
   "max_output": 10000000,  // [10000000]
+  "max_core": 4, // [4] 注意: 多核心 go 默认使用 4 核心
   "on_error_continue": ["accepted", "presentation error", "wrong answer"], // [["accepted", "presentation error"]]，也可以是 true 或 false
   "test_case_count": 1, // <必填>
   "spj_mode": "compare", // [no]，可以是 no, compare 或 interactive
