@@ -42,8 +42,8 @@
   "path": {
     "base": null, // [/mnt/data]
     "code": null, // [<base>/code/<pid>/<sid>/]，如无 pid 和 sid 则必填
-    "log": null, // [<base>/code/<pid>/<sid>/]，如无 pid 和 sid 则必填
-    "output": null, // [<temp>]
+    "log": null, // [<temp>]
+    "output": null, // [<base>/result/<pid>/<sid>/]，如无 pid 和 sid 则必填
     "stdin": null, // [<base>/case/<pid>/]，如无 pid 则必填，应包含 1.in - <test_case_count>.in
     "stdout": null, // [<stdin>]，应包含 1.out - <test_case_count>.out
     "temp": null, // [/tmp/]
