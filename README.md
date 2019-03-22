@@ -68,7 +68,24 @@
 ```
 
 + Special Judge 调用参数：
-+
+
+```
+如果是 compare，将在用户程序执行结束后运行，参数为
+< = /dev/null
+argv[1] = 该组数据的stdin
+argv[2] = 该组数据的 stdout
+argv[3] = 用户程序输出的 execout
+argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的文件夹
+> = <log>
+
+如果是 interactive，将稍早于用户程序运行，参数为
+< = 用户程序的 stdout
+argv[1] = 该组数据的stdin
+argv[2] = 该组数据的 stdout
+argv[3] = 如果为评测提供额外信息，写入到这个文件
+argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的文件夹
+> = 用户程序的 stdin
+```
 
 + 一个可能的内核输出：
 
