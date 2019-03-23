@@ -440,7 +440,8 @@ int validate_config(json& j) {
   if (debug)
     cout << "configuration validated with code " << error << endl;
 
-  cout << setw(2) << j << endl;
+  if (debug)
+    cout << setw(2) << j << endl;
 
   return error;
 }

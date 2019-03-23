@@ -1,0 +1,39 @@
+{
+  "groups": [
+    {
+      "name": "open",
+      "rules": {
+        "when": [2, "MASK", 1],
+        "then": "DENY",
+        "else": "ALLOW"
+      }
+    },
+    {
+      "name": "openat",
+      "rules": {
+        "when": [3, "MASK", 1],
+        "then": "DENY",
+        "else": "ALLOW"
+      }
+    }
+  ],
+  "rules": {
+    "open": [
+      {
+        "when": [1, "EQUAL", 1],
+        "then": "DENY",
+        "else": {
+          "when": []
+        }
+      },
+      "DENY"
+    ],
+    "openat": "openat",
+    "unlink": {
+      "when": true,
+      "then": "",
+      "else": {}
+    },
+    "default": "DENY"
+  }
+}
