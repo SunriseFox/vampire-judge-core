@@ -27,13 +27,14 @@
 ### Configuration File
 
 + 一个完整的可接受的配置文件（例子在 ./judgecore/conf/）
++ 编译的结果在 <output> 的 result.json
 
 ```json
 
 {
   "debug": true, // [false]
   "sid": 10001, // [undefined]
-  "filename": "main.cpp", // <必填>
+  "filename": "main.cpp", // [undefined]
   "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go
   "pid": 1001, // [undefined]
   "max_time": 1000, // [1000]
@@ -46,7 +47,7 @@
   "spj_mode": "compare", // [no]，可以是 no, compare 或 interactive
   "path": {
     "base": null, // [/mnt/data]
-    "code": null, // [<base>/code/<pid>/<sid>/]，如无 pid 和 sid 则必填
+    "code": null, // [<base>/code/<pid>/<sid>/<filename>]，如无 pid 和 sid 和 filename 则必填
     "log": null, // [<temp>]
     "output": null, // [<base>/result/<pid>/<sid>/]，如无 pid 和 sid 则必填
     "stdin": null, // [<base>/case/<pid>/]，如无 pid 则必填，应包含 1.in - <test_case_count>.in
@@ -59,11 +60,12 @@
 ```
 
 + 一个完整的编译 spj 的配置文件：
++ 编译的结果在 STDOUT
 
 ```json
 
 {
-  "debug":true, // [false]
+  "debug": true, // [false]
   "base_path": "/mnt/data/", // [/mnt/data]
   "pid": 1001, // [undefined]
   "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go
