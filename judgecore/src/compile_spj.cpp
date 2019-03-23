@@ -99,8 +99,8 @@ int read_config(int argc, char** argv, json& j) {
 
 int comile_c_cpp(json& j, const string& compile_command) {
   UNUSED(j);
-  if (debug) 
-    cout << "compiler command: " << compile_command << endl;    
+  if (debug)
+    cout << "compiler command: " << compile_command << endl;
 
   pid_t pid = fork();
   if(pid == -1) {
@@ -127,7 +127,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
       status = WEXITSTATUS(status);
       if (debug)
         cout << "compiler return code is : " << status << endl;
-        
+
       result["compiler"] = readFile(path["cmpinfo"]);
       if(status != 0) {
         failed();
@@ -140,7 +140,7 @@ int comile_c_cpp(json& j, const string& compile_command) {
 }
 
 int compile_exec_c (json& j) {
-  if (debug) 
+  if (debug)
     cout << "language is c" << endl;
   string compile_command = "gcc -DONLINE_JUDGE -O2 -std=c11 -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
@@ -149,7 +149,7 @@ int compile_exec_c (json& j) {
 }
 
 int compile_exec_cpp (json& j) {
-  if (debug) 
+  if (debug)
     cout << "language is cpp" << endl;
   string compile_command = "g++ -DONLINE_JUDGE -O2 -std=c++14 -Wall -Wextra -o "
           + path["exec"] + " " + path["code"] + " >"
@@ -159,14 +159,14 @@ int compile_exec_cpp (json& j) {
 
 int compile_exec_javascript (json& j) {
   UNUSED(j);
-  if (debug) 
+  if (debug)
     cout << "language is javascript, skip compile" << endl;
 
   ofstream script(path["exec"] + ".nodejs");
   string s = readFile(path["code"]);
   script << s << endl;
   script.close();
-  
+
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
   exec << "exec node --no-warnings " + path["exec"] + ".nodejs" << endl;
@@ -193,7 +193,7 @@ int compile_exec_python (json& j) {
 }
 
 int compile_exec_go (json& j) {
-  string compile_command = "go build -o " + path["exec"] 
+  string compile_command = "go build -o " + path["exec"]
           + " " + path["code"] + " >" + path["cmpinfo"] + " 2>&1";
   return comile_c_cpp(j, compile_command);
 }
@@ -283,7 +283,7 @@ int main (int argc, char** argv) {
   string target = j["target"].get<string>();
   size_t pos = target.find_last_of("/");
   if (pos != string::npos) {
-    target = target.substr(0, string::npos);
+    target = target.substr(0, pos);
     create_folder(target.c_str());
   }
 

@@ -27,7 +27,7 @@
 ### Configuration File
 
 + 一个完整的可接受的配置文件（例子在 ./judgecore/conf/）
-+ 编译的结果在 <output> 的 result.json
++ 输出的结果在 <output> 的 result.json
 
 ```json
 
