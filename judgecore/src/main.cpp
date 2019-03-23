@@ -1162,7 +1162,9 @@ void do_test(json& j) {
 
     map<string, string> extra;
     extra["stdin"] = path["stdin"] + "/" + cs + ".in";
+    if (access(extra["stdin"].c_str(), R_OK)) extra["stdin"] = "/dev/null";
     extra["stdout"] = path["stdout"] + "/" + cs + ".out";
+    if (access(extra["stdout"].c_str(), W_OK)) extra["stdout"] = "/dev/null";
     extra["output"] = path["output"] + "/" + cs + ".execout";
     extra["log"] = path["log"] + "/" + cs + ".log";
 
