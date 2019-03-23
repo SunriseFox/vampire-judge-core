@@ -8,6 +8,11 @@
 
 + 如果卷 /mnt/data 挂载在 Windows 目录下，Docker 无法进行文件权限控制，可能导致错误的程序有权删除该目录的任意文件
 
+### Known Issues in KVM / OpenVZ
+
++ 显然，OpenVZ 架构虚拟化无法运行这一内核
++ 不是所有的 KVM 都可以运行，必须显式说明 支持 Docker 或嵌套虚拟化的 KVM 才可以执行
+
 ### Build
 
 + (Linux) 打开 build.sh，修改 `-v /var/www/onlinejudge:/mnt/data` 的 `/var/www/onlinejudge` 为本地一个已存在的目录
