@@ -1266,6 +1266,7 @@ void do_test(json& j) {
       if (case_result.signal) {
         switch (case_result.signal)
         {
+        case SIGPIPE: rs = AC; break;
         case SIGXCPU: rs = TE; break;
         case SIGXFSZ: rs = OLE; break;
         case SIGABRT: rs = ME; break;
