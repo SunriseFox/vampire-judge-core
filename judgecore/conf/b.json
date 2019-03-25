@@ -6,8 +6,8 @@
   "max_output": 10000000,
   "max_core": 10,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
-  "test_case_count": 1,
-  "spj_mode": "compare",
+  "test_case_count": 10,
+  "spj_mode": 2,
   "path": {
     "spj": null
   }

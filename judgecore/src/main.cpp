@@ -857,9 +857,58 @@ int load_seccomp_tracee() {
   setgid(99);
   nice(10);
   chdir(path["sandbox"].c_str());
+  struct sock_filter filter[] = {
+    BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_execve, 34, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit, 33, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_read, 32, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_write, 31, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 30, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_brk, 29, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 28, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_geteuid, 27, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getegid, 26, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getppid, 25, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgrp, 24, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrlimit, 23, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getrusage, 22, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 21, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_sigaltstack, 20, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_readlink, 19, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_mmap, 18, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_munmap, 17, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_uname, 16, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getpgid, 15, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_stat, 14, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lstat, 13, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fstat, 12, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getuid, 11, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgid, 10, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getgroups, 9, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getresuid, 8, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents, 7, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_getdents64, 6, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_fcntl, 5, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_ioctl, 4, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_lseek, 3, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_exit_group, 2, 0),
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_rt_sigaction, 1, 0),
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_TRACE),
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
+  };
+  struct sock_fprog prog = {
+    .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
+    .filter = filter,
+  };
   ptrace(PTRACE_TRACEME, 0, 0, 0);
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1)
+  {
     perror("prctl(PR_SET_NO_NEW_PRIVS)");
+    return -1;
+  }
+  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == -1)
+  {
+    perror("when setting seccomp filter");
     return -1;
   }
   return 0;
@@ -880,10 +929,10 @@ int trace_thread(int pid, THREAD_INFO* info) {
   kill(pid, SIGSTOP);
 
   if (pid == waitpid(pid, &status, WSTOPPED)) {
-    if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD))
+    if (ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK))
       perror("set options");
 
-    if(ptrace(PTRACE_SYSCALL, pid, 0, 0))
+    if(ptrace(PTRACE_CONT, pid, 0, 0))
       perror("start tracing child");
   } else {
     kill(pid, SIGKILL);
@@ -915,7 +964,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
         return -1;
       }
       process_forked++;
-      ptrace(PTRACE_SYSCALL, pid, 0, 0);
+      ptrace(PTRACE_CONT, pid, 0, 0);
 
       kill(child_pid, SIGSTOP);
 
@@ -954,7 +1003,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
       return 0;
     }
 
-    if (WSTOPSIG(status) & 0x80)
+    if (status >> 8 == (SIGTRAP | (PTRAVE_EVENT_SECCOMP << 8)))
     {
       // syscall number
       orig_eax = ptrace(PTRACE_PEEKUSER, pid, sizeof(long) * ORIG_RAX, NULL);
@@ -967,9 +1016,10 @@ int trace_thread(int pid, THREAD_INFO* info) {
       {
         cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
         ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
-        ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), SIGSYS);
+        ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
+        kill(pid, SIGSYS);
       }
-      else if ((r = ptrace(PTRACE_SYSCALL, pid, reinterpret_cast<char *>(1), 0)) == -1)
+      else if ((r = ptrace(PTRACE_CONT, pid, reinterpret_cast<char *>(1), 0)) == -1)
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
@@ -980,7 +1030,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
     {
       if (debug)
         cout << "[" << pid << "] program reveived sig " << strsignal(WSTOPSIG(status)) << "(" << WSTOPSIG(status) << ")" << endl;
-      ptrace(PTRACE_SYSCALL, pid, 0, WSTOPSIG(status));
+      ptrace(PTRACE_CONT, pid, 0, WSTOPSIG(status));
       continue;
     }
   }
