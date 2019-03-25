@@ -123,6 +123,7 @@ void kill_timeout (int) {
     if (pid_to_kill > 0) {
       kill(pid_to_kill, SIGKILL);
       cerr << "killed " << pid_to_kill << " for sleeping too long" << endl;
+      if (result["extra"].is_null()) result["extra"] = "real time limit exceeded";
     }
     if (head) {
       pid_to_kill = head->pid;
