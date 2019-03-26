@@ -61,7 +61,7 @@ struct THREAD_INFO {
 
 int pid_to_kill = -1;
 int lpipe[2], rpipe[2];
-int r;
+mode_t code_permission;
 
 bool debug = false;
 SPJ_MODE spj_mode = SPJ_NO;
@@ -71,6 +71,7 @@ json result;
 
 map<string, string> path;
 map <int, string> syscall_name;
+
 std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
 int process_forked = 0;
@@ -197,16 +198,21 @@ string getStatusText(RESULT what) {
   }
 }
 
-int finish(RESULT what) {
+[[noreturn]] int finish(RESULT what) {
   result["status"] = what;
   result["result"] = getStatusText(what);
   ofstream of(path["result"]);
   of << (debug ? setw(2) : setw(0)) << result << endl;
   if (debug)
     cout << setw(2) << result << endl;
+
+  // cleanup
+  chmod(path.at("code").c_str(), code_permission & (~S_IROTH));
   umount2(path["sandbox"].c_str(), MNT_FORCE);
   rmdir(path["sandbox"].c_str());
+
   _exit(0);
+  throw std::range_error("finish function should not return");
 }
 
 int read_config(int argc, char** argv, json& j) {
@@ -449,6 +455,7 @@ int validate_config(json& j) {
 
 // TODO: sometimes not work?
 int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
+  int r;
   rlimit rlimits;
 
   rlimits.rlim_cur = time_limit / 1000 + 1;
@@ -492,12 +499,17 @@ int comile_c_cpp(json& j, const string& compile_command) {
   pid_t pid = fork();
   if(pid == -1) {
     cerr << "fork complier process failed" << endl;
-    return -1;
+    result["compiler"] = "fork complier process failed";
+    finish(CE);
   }
   if(pid == 0) {
+    if(setegid(99)) {
+      cerr << "set egid failed!" << endl;
+      raise(SIGSYS);
+    }
     if(seteuid(99)) {
       cerr << "set euid failed!" << endl;
-      return -1;
+      raise(SIGSYS);
     }
     set_resource_limit(7, 204800, 52428800);
     alarm(10);
@@ -633,24 +645,33 @@ int compile_exec_text (json& j) {
 }
 
 int generate_exec_args (json& j) {
+  int r = -1;
   switch (language) {
   case LANG_C:
-    return compile_exec_c(j);
+    r = compile_exec_c(j);
+    break;
   case LANG_CPP:
-    return compile_exec_cpp(j);
+    r = compile_exec_cpp(j);
+    break;
   case LANG_JAVASCRIPT:
-    return compile_exec_javascript(j);
+    r = compile_exec_javascript(j);
+    break;
   case LANG_PYTHON:
-    return compile_exec_python(j);
+    r = compile_exec_python(j);
+    break;
   case LANG_GO:
-    return compile_exec_go(j);
+    r = compile_exec_go(j);
+    break;
   case LANG_TEXT:
-    return compile_exec_text(j);
+    r = compile_exec_text(j);
+    break;
   default:
-    cerr << "unknown language (should not)" << endl;
-    return -1;
+    result["compiler"] = "unknown language id";
+    finish(CE);
   }
-  return -1;
+  if (r)
+    finish(CE);
+  return 0;
 }
 
 // int load_seccomp_child(SECCOMP_POLICY level, const std::initializer_list<string>& exes) {
@@ -917,7 +938,7 @@ int load_seccomp_tracee() {
 int trace_thread(int pid, THREAD_INFO* info) {
   if (debug)
     cout << "[" << pid << "] prepare tracing" << endl;
-  int orig_eax, eax, r;
+  int orig_eax, eax;
   int& status = info->status;
   rusage& usage = info->usage;
 
@@ -1019,7 +1040,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
         ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
         kill(pid, SIGSYS);
       }
-      else if ((r = ptrace(PTRACE_CONT, pid, reinterpret_cast<char *>(1), 0)) == -1)
+      else if (ptrace(PTRACE_CONT, pid, reinterpret_cast<char *>(1), 0) == -1)
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
@@ -1184,7 +1205,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   return SW;
 }
 
-void do_test(json& j) {
+[[ noreturn ]] void do_test(json& j) {
   int time_limit = j["max_time"].get<int>();
   int total_time_limit = j["max_time_total"].get<int>();
   int memory_limit = j["max_memory"].get<int>();
@@ -1251,7 +1272,7 @@ void do_test(json& j) {
         );
 
         cerr << "child process A exec failed" << endl;
-        return;
+        exit(255);
       }
 
       // interactive parent continues here
@@ -1275,7 +1296,7 @@ void do_test(json& j) {
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
 
         cerr << "child process B exec failed" << endl;
-        return;
+        exit(255);
       }
 
       // interactive parent continues here
@@ -1406,7 +1427,7 @@ void do_test(json& j) {
           exit(255);
         }
 
-        if((r = load_seccomp_tracee())) {
+        if(load_seccomp_tracee()) {
           cerr << "load seccomp rule failed" << endl;
           exit(255);
         };
@@ -1506,6 +1527,7 @@ void do_test(json& j) {
   finish(AC);
 
   cerr << "should not" << endl;
+  exit(255);
 }
 
 #include "syscall_name.hpp"
@@ -1560,19 +1582,20 @@ int main (int argc, char** argv) {
   result["detail"] = {};
   result["compiler"] = nullptr;
 
-  // compile source or check syntax
-  if(generate_exec_args(j))
-    exit(255);
+  struct stat fileStat;
+  if(stat(path.at("code").c_str(), &fileStat) < 0) {
+    cerr << "unable to access code file" << endl;
+  }
+  code_permission = fileStat.st_mode;
+  if (!(code_permission & S_IROTH)) {
+    chmod(path.at("code").c_str(), code_permission | S_IROTH);
+  }
+
+  // compile source or check syntax, this function won't fail
+  generate_exec_args(j);
 
   // do test
-
   mount("none", path["sandbox"].c_str(), "tmpfs", MS_NOATIME |  MS_NODEV | MS_NODIRATIME | MS_NOEXEC | MS_NOSUID, "");
-
   do_test(j);
-
-  umount2(path["sandbox"].c_str(), MNT_FORCE);
-  rmdir(path["sandbox"].c_str());
-
-  // should not
-  exit(254);
+  throw std::range_error("main function should no return");
 }
