@@ -893,9 +893,15 @@ int generate_exec_args (json& j) {
 // }
 
 int load_seccomp_tracee() {
-  setuid(99);
-  setgid(99);
   nice(10);
+  if (setgid(99)) {
+    perror("set_gid");
+    return -1;
+  };
+  if (setuid(99)) {
+    perror("set_uid");
+    return -1;
+  };
   chdir(path["sandbox"].c_str());
   struct sock_filter filter[] = {
     BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
