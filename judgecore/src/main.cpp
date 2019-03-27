@@ -491,10 +491,14 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
   return 0;
 }
 
-int comile_c_cpp(json& j, const string& compile_command) {
-  UNUSED(j);
-  if (debug)
-    cout << "compiler command: " << compile_command << endl;
+int compile_c_cpp(std::vector<const char*> args) {
+  if (debug) {
+    cout << "compiler command: ";
+    for (const auto& i: args) {
+      cout << i << ' ';
+    }
+    cout << endl;
+  }
 
   pid_t pid = fork();
   if(pid == -1) {
@@ -503,6 +507,9 @@ int comile_c_cpp(json& j, const string& compile_command) {
     finish(CE);
   }
   if(pid == 0) {
+    int fd = open(path.at("cmpinfo").c_str(), O_WRONLY);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
     if(setegid(99)) {
       cerr << "set egid failed!" << endl;
       raise(SIGSYS);
@@ -512,23 +519,26 @@ int comile_c_cpp(json& j, const string& compile_command) {
       raise(SIGSYS);
     }
     set_resource_limit(7, 204800, 52428800);
-    alarm(10);
-    signal(SIGALRM, [](int){exit(-1);});
-    int ret = system(compile_command.c_str ());
-    unsigned int sec = 10 - alarm(0);
-    if (debug)
-      cout << "compile time is " << sec << " seconds" << endl;
-    if(WIFEXITED(ret))
-        exit(WEXITSTATUS(ret));
-    raise(WTERMSIG(ret));
+    args.push_back(nullptr);
+    if (execvp(args[0], const_cast<char**>(&args[0])))
+      perror("while exec") ;
+    raise(SIGSYS);
   } else {
+    int compile_timeout = 10;
+    alarm(compile_timeout);
+    pid_to_kill = pid;
+    signal(SIGALRM, kill_timeout);
     int status;
     wait(&status);
+    int sec = compile_timeout - alarm(0);
+    if (debug)
+      cout << "compile time is " << sec << " seconds" << endl;
     if(!WIFEXITED(status)) {
-        cerr << "compiler process killed by sig " << WTERMSIG(status) << endl;
-        return WTERMSIG(status);
+      cerr << "compiler process killed by sig " << WTERMSIG(status) << endl;
+      status = WTERMSIG(status);
+    } else {
+      status = WEXITSTATUS(status);
     }
-    status = WEXITSTATUS(status);
     if (debug)
       cout << "compiler return code is : " << status << endl;
     result["compiler"] = readFile(path["cmpinfo"]);
@@ -543,21 +553,26 @@ int comile_c_cpp(json& j, const string& compile_command) {
 }
 
 int compile_exec_c (json& j) {
+  UNUSED(j);
   if (debug)
     cout << "language is c" << endl;
-  string compile_command = "gcc -DONLINE_JUDGE -lpthread -O2 -static -std=c11 -fno-asm -Wall -Wextra -o "
-          + path["exec"] + " " + path["code"] + " >"
-          + path["cmpinfo"] + " 2>&1";
-  return comile_c_cpp(j, compile_command);
+  const std::vector<const char*>  args = {
+    "gcc", "-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o",
+    path["exec"].c_str(), path["code"].c_str()
+  };
+  return compile_c_cpp(args);
 }
 
 int compile_exec_cpp (json& j) {
+  UNUSED(j);
   if (debug)
     cout << "language is cpp" << endl;
-  string compile_command = "g++ -DONLINE_JUDGE -pthread -O2 -static -std=c++14 -fno-asm -Wall -Wextra -o "
-          + path["exec"] + " " + path["code"] + " >"
-          + path["cmpinfo"] + " 2>&1";
-  return comile_c_cpp(j, compile_command);
+
+  const std::vector<const char*>  args = {
+     "g++", "-DONLINE_JUDGE", "-pthread", "-O2", "-static", "-std=c++14", "-fno-asm", "-Wall", "-Wextra", "-o",
+     path["exec"].c_str(), path["code"].c_str()
+  };
+  return compile_c_cpp(args);
 }
 
 int compile_exec_javascript (json& j) {
@@ -612,15 +627,17 @@ R"+(
 }
 
 int compile_exec_python (json& j) {
+  UNUSED(j);
   ofstream script(path["temp"] + "compile_script.py");
   script << "import py_compile\npy_compile.compile('";
   script << path["code"] << "', cfile='" << path["exec"];
   script << ".pyc', doraise=True)" << endl;
   script.close();
-  string compile_command = "python3 -OO "
-          + path["temp"] + "compile_script.py" + " >"
-          + path["cmpinfo"] + " 2>&1";
-  int r = comile_c_cpp(j, compile_command);
+
+  const std::vector<const char*>  args = {
+    "python3", "-OO", (path["temp"] + "compile_script.py").c_str(),
+  };
+  int r = compile_c_cpp(args);
   if (r) return r;
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
@@ -630,9 +647,11 @@ int compile_exec_python (json& j) {
 }
 
 int compile_exec_go (json& j) {
-  string compile_command = "go build -o " + path["exec"]
-          + " " + path["code"] + " >" + path["cmpinfo"] + " 2>&1";
-  return comile_c_cpp(j, compile_command);
+  UNUSED(j);
+  const std::vector<const char*>  args = {
+    "go", "build", "-o", path["exec"].c_str(), path["code"].c_str()
+  };
+  return compile_c_cpp(args);
 }
 
 int compile_exec_text (json& j) {
@@ -1564,12 +1583,14 @@ int main (int argc, char** argv) {
   path["exec"] = path["temp"] + "/main";
   unlink(path["exec"].c_str());
   ofstream(path["exec"]).close();
-  chmod(path["exec"].c_str(), S_IRWXG|S_IRWXU);
+  chmod(path["exec"].c_str(), S_IRWXG|S_IRWXU|S_IRWXO);
 
   path["spj"] = j["path"]["spj"];
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());
+  ofstream(path["cmpinfo"]).close();
+  chmod(path["cmpinfo"].c_str(), S_IRWXG|S_IRWXU|S_IRWXO);
 
   path["sandbox"] = path["temp"] + "/sandbox-" + random_string(6) + "/";
   mkdir(path["sandbox"].c_str(), 0777);
