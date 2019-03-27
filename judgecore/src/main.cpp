@@ -550,7 +550,7 @@ int compile_c_cpp(std::vector<const char*> args) {
     if (debug)
       cout << "compile time is " << sec << " seconds" << endl;
 
-    string compile_info = readFile(path["cmpinfo"]);
+    string compile_info = readFile(path["cmpinfo"], 5000);
     if(!WIFEXITED(status)) {
       compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
       status = WTERMSIG(status);
