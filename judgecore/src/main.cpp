@@ -343,6 +343,16 @@ int validate_config(json& j) {
     error = 1;
   }
 
+  if (j["max_real_time"].is_null()) {
+    if (debug)
+      cout << "max real time total is null, default to max time + 5000" << endl;
+    j["max_real_time"] = j["max_time"].get<int>() + 5000;
+  } else if (!j["max_real_time"].is_number_integer()
+    || j["max_real_time"].get<int>() < 0) {
+    cerr << "max time total is not an integer" << endl;
+    error = 1;
+  }
+
   if (j["max_time_total"].is_null()) {
     if (debug)
       cout << "max time total is null, default to 30000ms" << endl;
@@ -510,6 +520,10 @@ int compile_c_cpp(std::vector<const char*> args) {
     int fd = open(path.at("cmpinfo").c_str(), O_WRONLY);
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
+    set_resource_limit(7, 204800, 52428800);
+    if (setpgid(0, 0)) {
+      cerr << "set pgid failed!" << endl;
+    };
     if(setegid(99)) {
       cerr << "set egid failed!" << endl;
       raise(SIGSYS);
@@ -518,7 +532,6 @@ int compile_c_cpp(std::vector<const char*> args) {
       cerr << "set euid failed!" << endl;
       raise(SIGSYS);
     }
-    set_resource_limit(7, 204800, 52428800);
     args.push_back(nullptr);
     if (execvp(args[0], const_cast<char**>(&args[0])))
       perror("while exec") ;
@@ -527,21 +540,26 @@ int compile_c_cpp(std::vector<const char*> args) {
     int compile_timeout = 10;
     alarm(compile_timeout);
     pid_to_kill = pid;
-    signal(SIGALRM, kill_timeout);
+    signal(SIGALRM, [](int) {
+      kill(-pid_to_kill, SIGKILL);
+    });
     int status;
     wait(&status);
     int sec = compile_timeout - alarm(0);
+    pid_to_kill = 0;
     if (debug)
       cout << "compile time is " << sec << " seconds" << endl;
+
+    string compile_info = readFile(path["cmpinfo"]);
     if(!WIFEXITED(status)) {
-      cerr << "compiler process killed by sig " << WTERMSIG(status) << endl;
+      compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
       status = WTERMSIG(status);
     } else {
       status = WEXITSTATUS(status);
     }
+    result["compiler"] = compile_info;
     if (debug)
       cout << "compiler return code is : " << status << endl;
-    result["compiler"] = readFile(path["cmpinfo"]);
     if(status != 0) {
       finish (CE);
     }
@@ -1232,6 +1250,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 
 [[ noreturn ]] void do_test(json& j) {
   int time_limit = j["max_time"].get<int>();
+  int real_time_limit = j["max_real_time"].get<int>() / 1000 + 1;
   int total_time_limit = j["max_time_total"].get<int>();
   int memory_limit = j["max_memory"].get<int>();
   int output_limit = j["max_output"].get<int>();
@@ -1329,7 +1348,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 
       JUDGE_RESULT jresult;
 
-      alarm(time_limit / 1000 + 10);
+      alarm(real_time_limit);
       signal(SIGALRM, kill_timeout);
 
       if (load_seccomp_tracer(b_pid, jresult) == -1) {
@@ -1467,7 +1486,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       }
       // non interactive parent continues here
 
-      alarm(time_limit / 1000 + 5);
+      alarm(real_time_limit);
       signal(SIGALRM, kill_timeout);
 
       JUDGE_RESULT jresult;
