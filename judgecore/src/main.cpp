@@ -517,6 +517,7 @@ int compile_c_cpp(std::vector<const char*> args) {
     finish(CE);
   }
   if(pid == 0) {
+    setenv("HOME", "/tmp/nobody", 1);
     int fd = open(path.at("cmpinfo").c_str(), O_WRONLY);
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
