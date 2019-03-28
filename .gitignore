@@ -1,5 +1,22 @@
 .vscode/
+
+# binary
+
 judgecore/compiler
 judgecore/judgecore
 judgecore/tracee
 judgecore/tracer
+
+# profile-case binary
+
+profile/output
+profile/syscall
+profile/write
+
+# test-case binary
+
+testcase/judge/9002
+testcase/judge/9003
+
+# magic files
+judgecore/conf/seccomp.json

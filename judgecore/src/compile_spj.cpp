@@ -274,6 +274,9 @@ int main (int argc, char** argv) {
   if ((r = read_config(argc, argv, j)))
     _exit(255);
 
+  if (j["base_path"].is_null())
+    j["base_path"] = "/mnt/data";
+
   if (j["code"].is_null()) {
     j["code"] = j["base_path"].get<string>() + "/judge/" + to_string(j["pid"].get<int>()) + "." + get_lang_ext(j);
   }
