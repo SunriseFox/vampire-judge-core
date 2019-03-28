@@ -987,6 +987,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
   if (ptrace(PTRACE_SEIZE, pid, NULL, NULL)) {
     perror("while attach");
+    status = 255;
     return -1;
   }
 
@@ -1138,13 +1139,13 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
     int time = (int) (info->usage.ru_utime.tv_sec * 1000 + info->usage.ru_utime.tv_usec / 1000);
     result.time += time;
     result.memory += info->usage.ru_maxrss;
-    if (result.status == 0 && info->status != 0 && WSTOPSIG(info->status) != 133)
+    if (result.status == 0 && info->status != 0)
       result.status = info->status;
     if (debug) {
       cout << "[-------] thread debugging *" << info->pid << "* exited." << endl;
       cout << "time: " << time << ", ";
       cout << "memory: " << info->usage.ru_maxrss << endl;
-      if (info->status != 0 && WSTOPSIG(info->status) != 133) {
+      if (info->status != 0) {
         cout << "WIFEXITED: " << WIFEXITED(info->status) << endl;
         cout << "WEXITSTATUS: " << WEXITSTATUS(info->status) << endl;
         cout << "WIFSIGNALED: " << WIFSIGNALED(info->status) << endl;
@@ -1461,12 +1462,29 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
           cout << "execout:" << extra["output"] << endl;
         }
 
-        FILE *file_in = freopen(extra["stdin"].c_str(), "r", stdin);
-        FILE *file_out = freopen(extra["output"].c_str(), "w", stdout);
+        int r = 0;
 
-        if (file_in == nullptr || file_out == nullptr) {
-          fclose(file_in);
-          fclose(file_out);
+        int fd_in = open(extra["stdin"].c_str(), O_RDONLY);
+        r = dup2(fd_in, STDIN_FILENO);
+        if (r == -1)
+          perror("fd_in");
+
+        int fd_out = open(extra["output"].c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+        if (r != -1) {
+            r = dup2(fd_out, STDOUT_FILENO);
+          if (r == -1)
+            perror("fd_out");
+        }
+
+        if (r != -1) {
+            r = dup2(fd_out, STDERR_FILENO);
+          if (r == -1)
+            perror("fd_err");
+        }
+
+        if (r == -1) {
+          close(fd_in);
+          close(fd_out);
           cerr << "failed to redirect input & output." << endl;
           exit(255);
         }
@@ -1478,8 +1496,8 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 
         execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
 
-        fclose(file_in);
-        fclose(file_out);
+        close(fd_in);
+        close(fd_out);
 
         cerr << "exec failed" << endl;
         exit(255);
