@@ -15,9 +15,13 @@
 
 ### Build
 
-+ (Linux) 打开 build.sh，修改 `-v /var/www/onlinejudge:/mnt/data` 的 `/var/www/onlinejudge` 为本地一个已存在的目录
-+ (Windows) 打开 build.bat，修改 `-v "D:\0bysj\core":/mnt/core` 的 `D:\0bysj\core` 为 *当前目录*，`-v "D:\0bysj\volume":/mnt/data` 的 `D:\0bysj\volume` 为一个已存在的目录
-+ 运行对应的 build.sh 或 build.bat
++ (Linux) 打开 build.sh，修改 `MOUNTFOLDER` 为本地一个已存在的目录
++ (Windows) 打开 build.bat，修改 `MOUNTFOLDER` 为本地一个已存在的目录
++ 运行对应的 `build.sh` 或 `build.bat`
+
+### 测试
+
++ 项目在 testcase 中提供了测试样例，只需要运行当前目录的 `./test.sh` 或 `test.bat` 即可。
 
 ### Usage
 
