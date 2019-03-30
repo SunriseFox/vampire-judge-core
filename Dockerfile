@@ -9,10 +9,16 @@ RUN yum -y update
 
 RUN yum -y install devtoolset-8
 
-# node
+# node - deprecated
 
-RUN curl -sL https://rpm.nodesource.com/setup_11.x | bash -
-RUN yum -y install nodejs
+# RUN curl -sL https://rpm.nodesource.com/setup_11.x | bash -
+# RUN yum -y install nodejs
+
+# v8
+
+RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/d8-latest-prebuild.tar
+RUN mkdir /usr/bin/v8
+RUN tar -C /usr/bin/v8 -zxvf /tmp/v8.tar x64.release --strip-components 1
 
 # python
 
