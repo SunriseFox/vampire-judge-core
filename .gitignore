@@ -12,6 +12,7 @@ judgecore/tracer
 profile/output
 profile/syscall
 profile/write
+profile/tracer
 
 # test-case binary
 

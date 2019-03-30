@@ -1,7 +1,7 @@
 {
   "pid": 1001,
   "max_time": 1000,
-  "max_real_time": 1000,
+  "max_real_time": 10000,
   "max_time_total": 30000,
   "max_memory": 65530,
   "max_output": 10000000,

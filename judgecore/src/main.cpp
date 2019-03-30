@@ -1078,14 +1078,25 @@ int trace_thread(int pid, THREAD_INFO* info) {
       if (debug)
         cout << "[" << pid << "] got syscall " << syscall_name[orig_eax] << "(" << orig_eax << ") " << eax << endl;
 
-      if ( eax == -38 && validate_syscall(pid, orig_eax) )
+      if ( eax == -38 )
       {
-        cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
-        ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
-        ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
-        kill(pid, SIGSYS);
+        enum {ALLOW = 0, TRACE = 1, DENY = 2, KILL = 3};
+        int res = validate_syscall(pid, orig_eax);
+        if(res == DENY) {
+          ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
+          ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
+          kill(pid, SIGSYS);
+          cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
+        } else if (res == TRACE) {
+          ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
+          cerr << "[" << pid << "] syscall " << orig_eax <<" skipped by validator" << endl;
+        } else if (res == KILL) {
+          kill(pid, SIGKILL);
+          cerr << "[" << pid << "] syscall " << orig_eax <<" killed by validator" << endl;
+        }
       }
-      else if (ptrace(PTRACE_CONT, pid, reinterpret_cast<char *>(1), 0) == -1)
+
+      if (ptrace(PTRACE_CONT, pid, reinterpret_cast<char *>(1), 0) == -1)
       {
         cerr << "[" << pid << "] failed to continue from breakpoint" << endl;
         kill(pid, SIGKILL);
@@ -1430,7 +1441,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
-      string log = readFile(extra.at("log"), 100);
+      string log = readFile(extra.at("log"), 1000);
       if (log.size() == 0) {
         r["extra"] = nullptr;
       } else {
