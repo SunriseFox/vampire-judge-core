@@ -595,52 +595,13 @@ int compile_exec_cpp (json& j) {
 }
 
 int compile_exec_javascript (json& j) {
+  UNUSED(j);
   if (debug)
     cout << "language is javascript, skip compile" << endl;
-  ofstream script(path["exec"] + ".nodejs");
-  string s = R"+(const readline = require('readline');
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-  crlfDelay: Infinity,
-});
-
-const line = (async function* _readLine() {
-  for await (const line of rl) {
-    yield line;
-  }
-})()
-
-async function read() {
-  return (await line.next()).value
-}
-
-function write(data) {
-  process.stdout.write(data.toString())
-}
-
-function writeLine(data) {
-  process.stdout.write(data + '\n')
-}
-
-process.on('unhandledRejection', (reason, p) => {
-  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
-  process.exit(-1)
-});
-
-(async function main() {
-)+"
-+ readFile(path["code"]) +
-R"+(
-})().then(() => process.exit(0)))+";
-  script << s << endl;
-  script.close();
 
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
-  exec << "exec node --no-warnings --max-old-space-size=" + to_string(j["max_memory"].get<int>() / 4000) + " " + path["exec"] + ".nodejs" << endl;
+  exec << "exec /usr/bin/v8/d8 " + path["code"]  << endl;
   exec.close();
   return 0;
 }
@@ -1483,6 +1444,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
         if (r == -1)
           perror("fd_in");
 
+        unlink(extra["output"].c_str());
         int fd_out = open(extra["output"].c_str(), O_WRONLY | O_CREAT | O_TRUNC);
         if (r != -1) {
             r = dup2(fd_out, STDOUT_FILENO);
