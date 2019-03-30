@@ -1128,6 +1128,8 @@ struct JUDGE_RESULT {
 };
 
 int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
+  process_forked = 0;
+
   info = tail = new THREAD_INFO;
   int status;
 

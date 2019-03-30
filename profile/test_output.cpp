@@ -6,4 +6,5 @@ int main() {
   for (int i = 0; i < 100 * 10000; i++) {
     cout << 1 << "";
   }
+  cout << flush;
 }
