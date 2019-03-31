@@ -16,9 +16,15 @@ RUN yum -y install devtoolset-8
 
 # v8
 
-RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/d8-latest-prebuild.tar
+RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/v8-latest-prebuild.tgz
 RUN mkdir /usr/bin/v8
 RUN tar -C /usr/bin/v8 -zxvf /tmp/v8.tar x64.release --strip-components 1
+
+# pypy3
+
+RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/pypy-latest-prebuild.tgz
+RUN tar -C /usr/bin -zxvf pypy-latest-prebuild.tgz
+RUN mv /usr/bin/pypy/bin/libpypy3-c.so /usr/bin/pypy/bin/libpypy3-c.so.debug /lib64
 
 # python
 

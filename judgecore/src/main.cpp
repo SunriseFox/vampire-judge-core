@@ -42,7 +42,7 @@ using json = nlohmann::json;
 using namespace std;
 
 enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
-enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PYTHON, LANG_GO, LANG_TEXT};
+enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PYTHON, LANG_GO, LANG_TEXT, LANG_PYPY3};
 enum SPJ_MODE {SPJ_NO = 0, SPJ_COMPARE, SPJ_INTERACTIVE};
 enum SECCOMP_POLICY {POLICY_STRICT_SAFE = 0, POLICY_ALLOW_COMMON, POLICY_BESTEFFORT_SANDBOX, POLICY_CUSTOM};
 
@@ -442,6 +442,8 @@ int validate_config(json& j) {
       language = LANG_GO;
     } else if(lang_str == "text") {
       language = LANG_TEXT;
+    }else if(lang_str == "pypy3") {
+      language = LANG_PYPY3;
     } else {
       cerr << "unknown language " << lang_str << endl;
       error = 1;
@@ -450,12 +452,13 @@ int validate_config(json& j) {
     int lang_int = j["lang"].get<int>();
     switch (lang_int)
     {
-      case 0: language = LANG_C; break;
-      case 1: language = LANG_CPP; break;
-      case 2: language = LANG_JAVASCRIPT; break;
-      case 3: language = LANG_PYTHON; break;
-      case 4: language = LANG_GO; break;
-      case 5: language = LANG_TEXT; break;
+      case LANG_C: language = LANG_C; break;
+      case LANG_CPP: language = LANG_CPP; break;
+      case LANG_JAVASCRIPT: language = LANG_JAVASCRIPT; break;
+      case LANG_PYTHON: language = LANG_PYTHON; break;
+      case LANG_GO: language = LANG_GO; break;
+      case LANG_TEXT: language = LANG_TEXT; break;
+      case LANG_PYPY3: language = LANG_PYPY3; break;
       default:
         cerr << "unknown language id" << lang_int << endl;
         error = 1;
@@ -618,6 +621,16 @@ int compile_exec_javascript (json& j) {
 int compile_exec_python (json& j) {
   UNUSED(j);
   ofstream script(path["temp"] + "compile_script.py");
+  script << "from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('";
+  script << path["code"] << "')";
+  script <<
+R"+(
+badmodules = ' '.join(finder.badmodules.keys())
+if len(finder.badmodules) is 0:
+  pass
+else:
+  raise ModuleNotFoundError(badmodules)
+)+";
   script << "import py_compile\npy_compile.compile('";
   script << path["code"] << "', cfile='" << path["exec"];
   script << ".pyc', doraise=True)" << endl;
@@ -631,6 +644,37 @@ int compile_exec_python (json& j) {
   ofstream exec(path["exec"]);
   exec << "#! /bin/bash\n";
   exec << "exec python3 " + path["exec"] + ".pyc" << endl;
+  exec.close();
+  return 0;
+}
+
+int compile_exec_pypy3 (json& j) {
+  UNUSED(j);
+  ofstream script(path["temp"] + "compile_script.py");
+
+  script << "from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('";
+  script << path["code"] << "')";
+  script <<
+R"+(
+badmodules = ' '.join(finder.badmodules.keys())
+if len(finder.badmodules) is 0:
+  pass
+else:
+  raise ModuleNotFoundError(badmodules)
+)+";
+  script << "import py_compile\npy_compile.compile('";
+  script << path["code"] << "', cfile='" << path["exec"];
+  script << ".pyc', doraise=True)" << endl;
+  script.close();
+
+  const std::vector<const char*>  args = {
+    "/usr/bin/pypy/bin/pypy3", "-OO", (path["temp"] + "compile_script.py").c_str(),
+  };
+  int r = compile_c_cpp(args);
+  if (r) return r;
+  ofstream exec(path["exec"]);
+  exec << "#! /bin/bash\n";
+  exec << "exec /usr/bin/pypy/bin/pypy3 " + path["exec"] + ".pyc" << endl;
   exec.close();
   return 0;
 }
@@ -672,6 +716,9 @@ int generate_exec_args (json& j) {
     break;
   case LANG_TEXT:
     r = compile_exec_text(j);
+    break;
+  case LANG_PYPY3:
+    r = compile_exec_pypy3(j);
     break;
   default:
     result["compiler"] = "unknown language id";
