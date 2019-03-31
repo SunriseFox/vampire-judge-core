@@ -625,11 +625,15 @@ int compile_exec_python (json& j) {
   script << path["code"] << "')";
   script <<
 R"+(
-badmodules = ' '.join(finder.badmodules.keys())
+badmodules = []
 if len(finder.badmodules) is 0:
   pass
 else:
-  raise ModuleNotFoundError(badmodules)
+  for package in finder.badmodules:
+    if '__main__' in finder.badmodules[package]:
+      badmodules.append(package)
+if len(badmodules) is not 0:
+  raise ModuleNotFoundError(' '.join(badmodules))
 )+";
   script << "import py_compile\npy_compile.compile('";
   script << path["code"] << "', cfile='" << path["exec"];
@@ -656,11 +660,15 @@ int compile_exec_pypy3 (json& j) {
   script << path["code"] << "')";
   script <<
 R"+(
-badmodules = ' '.join(finder.badmodules.keys())
+badmodules = []
 if len(finder.badmodules) is 0:
   pass
 else:
-  raise ModuleNotFoundError(badmodules)
+  for package in finder.badmodules:
+    if '__main__' in finder.badmodules[package]:
+      badmodules.append(package)
+if len(badmodules) is not 0:
+  raise ModuleNotFoundError(' '.join(badmodules))
 )+";
   script << "import py_compile\npy_compile.compile('";
   script << path["code"] << "', cfile='" << path["exec"];
@@ -1484,11 +1492,12 @@ int preprocess(json& j) {
     chmod(path.at("code").c_str(), code_permission | S_IROTH);
   }
 
-  // make something special for javascript
-
+  // make something special for javascript, pypy3
+  int orig_mem = j["max_memory"].get<int>();
   if (language == LANG_JAVASCRIPT) {
-    int orig_mem = j["max_memory"].get<int>();
     j["max_memory"] = max(orig_mem, 524288); // 512 M
+  } else if (language == LANG_PYPY3) {
+    j["max_memory"] = max(orig_mem, orig_mem * 3); // 3 times
   }
 
   return 0;
