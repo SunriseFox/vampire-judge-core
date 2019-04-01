@@ -208,17 +208,20 @@ string getStatusText(RESULT what) {
 }
 
 [[noreturn]] int finish(RESULT what) {
-  result["status"] = what;
-  result["result"] = getStatusText(what);
-  ofstream of(path["result"]);
-  of << (debug ? setw(2) : setw(0)) << result << endl;
-  if (debug)
-    cout << setw(2) << result << endl;
-
   // cleanup
   chmod(path.at("code").c_str(), code_permission & (~S_IROTH));
   umount2(path["sandbox"].c_str(), MNT_FORCE);
   rmdir(path["sandbox"].c_str());
+
+  // this may fail, so clean up first
+  result["status"] = what;
+  result["result"] = getStatusText(what);
+  ofstream of(path["result"]);
+
+  auto result_str = result.dump(debug ? 2 : -1, ' ', false, json::error_handler_t::replace);
+  of << result_str << endl;
+  if (debug)
+    cout << result_str << endl;
 
   _exit(0);
   throw std::range_error("finish function should not return");
@@ -1505,7 +1508,7 @@ int preprocess(json& j) {
 
 #include "syscall_name.hpp"
 
-int main (int argc, char** argv) {
+int main (int argc, char** argv) try {
   initialize(syscall_name);
 
   json j;
@@ -1525,4 +1528,13 @@ int main (int argc, char** argv) {
   mount("none", path["sandbox"].c_str(), "tmpfs", MS_NOATIME |  MS_NODEV | MS_NODIRATIME | MS_NOEXEC | MS_NOSUID, "");
   do_test(j);
   throw std::range_error("main function should no return");
+} catch (const nlohmann::json::exception& e) {
+  result["extra"] = string("core caught json exception: ") + e.what();
+  finish(SW);
+} catch (const std::exception& e) {
+  result["extra"] = string("core caught std exception: ") + e.what();
+  finish(SW);
+} catch (...) {
+  result["extra"] = string("core caught unknown exception");
+  finish(SW);
 }
