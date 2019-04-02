@@ -478,7 +478,7 @@ int validate_config(json& j) {
   return error;
 }
 
-// TODO: sometimes not work?
+// time in ms, memory in kb, output limit in bytes
 int set_resource_limit(const int& time_limit, const int& memory_limit, const int& output_limit) {
   int r;
   rlimit rlimits;
@@ -536,7 +536,7 @@ int compile_c_cpp(std::vector<const char*> args) {
     int fd = open(path.at("cmpinfo").c_str(), O_WRONLY);
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
-    set_resource_limit(7, 204800, 52428800);
+    set_resource_limit(7000, 204800, 52428800);
     if (setpgid(0, 0)) {
       cerr << "set pgid failed!" << endl;
     };
@@ -553,7 +553,7 @@ int compile_c_cpp(std::vector<const char*> args) {
       perror("while exec") ;
     raise(SIGSYS);
   } else {
-    int compile_timeout = 10;
+    int compile_timeout = 12;
     alarm(compile_timeout);
     pid_to_kill = pid;
     signal(SIGALRM, [](int) {
