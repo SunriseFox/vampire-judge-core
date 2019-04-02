@@ -43,6 +43,7 @@
   "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go, pypy3
   "pid": 1001, // [undefined]
   "max_time": 1000, // [1000]
+  "max_real_time": 2000, // [max_time + 1]
   "max_time_total": 30000, // [30000]
   "max_memory": 65530, // [65530]
   "max_output": 10000000,  // [10000000]
@@ -115,7 +116,8 @@ argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的�
       "memory": 1848,
       "result": "accepted",
       "status": 0, // enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
-      "time": 0
+      "time": 0,
+      "extra": "<特殊评测程序的输出>",
     }
   ],
   "extra": null, // 可能存在的错误详情
@@ -135,7 +137,8 @@ argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的�
       "signal": 11, // 运行错误特有的字段
       "signal_str": "Segmentation fault", // 运行错误特有的字段
       "status": 4,
-      "time": 0
+      "time": 0,
+      "extra": null,
     }
   ],
   "extra": null,
@@ -155,7 +158,8 @@ argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的�
       "signal": 31,
       "signal_str": "Bad system call",
       "status": 8,
-      "time": 0
+      "time": 0,
+      "extra": null,
     }
   ],
   "extra": null,

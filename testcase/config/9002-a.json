@@ -8,7 +8,7 @@
   "max_core": 10,
   "on_error_continue": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 1,
-  "spj_mode": 0,
+  "spj_mode": 1,
   "path": {
     "spj": null
   }

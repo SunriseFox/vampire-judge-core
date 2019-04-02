@@ -377,7 +377,7 @@ int validate_config(json& j) {
 
   if (j["max_memory"].is_null()) {
     if (debug)
-      cout << "max memory is null, default to 65535KB" << endl;
+      cout << "max memory is null, default to 65535 KB" << endl;
     j["max_memory"] = 65535;
   } else if (!j["max_memory"].is_number_integer()
     || j["max_memory"].get<int>() < 0) {
@@ -387,8 +387,8 @@ int validate_config(json& j) {
 
   if (j["max_output"].is_null()) {
     if (debug)
-      cout << "max output is null, default to 10000KB" << endl;
-    j["max_output"] = 10000;
+      cout << "max output is null, default to 10000000 bytes" << endl;
+    j["max_output"] = 10000000;
   } else if (!j["max_output"].is_number_integer()
     || j["max_output"].get<int>() < 0) {
     cerr << "max_output is not integer number" << endl;
@@ -557,6 +557,8 @@ int compile_c_cpp(std::vector<const char*> args) {
     alarm(compile_timeout);
     pid_to_kill = pid;
     signal(SIGALRM, [](int) {
+      if (debug)
+        cout << "received sigalrm (compiler timeout)" << endl;
       kill(-pid_to_kill, SIGKILL);
     });
     int status;

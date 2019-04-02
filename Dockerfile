@@ -14,18 +14,6 @@ RUN yum -y install devtoolset-8
 # RUN curl -sL https://rpm.nodesource.com/setup_11.x | bash -
 # RUN yum -y install nodejs
 
-# v8
-
-RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/v8-latest-prebuild.tgz
-RUN mkdir /usr/bin/v8
-RUN tar -C /usr/bin/v8 -zxvf /tmp/v8.tar x64.release --strip-components 1
-
-# pypy3
-
-RUN curl -o /tmp/v8.tar https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/pypy-latest-prebuild.tgz
-RUN tar -C /usr/bin -zxvf pypy-latest-prebuild.tgz
-RUN mv /usr/bin/pypy/bin/libpypy3-c.so /usr/bin/pypy/bin/libpypy3-c.so.debug /lib64
-
 # python
 
 RUN yum -y install rh-python36
@@ -37,6 +25,18 @@ RUN yum -y install golang
 # static lib
 
 RUN yum -y install glibc-static
+
+# v8
+
+RUN curl -Lo /tmp/v8.tgz https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/v8-latest-prebuild.tgz
+RUN mkdir /usr/bin/v8
+RUN tar -C /usr/bin/v8 -zxf /tmp/v8.tgz x64.release --strip-components 1
+
+# pypy3
+
+RUN curl -Lo /tmp/pypy.tgz https://github.com/SunriseFox/vampire-judge-core/releases/download/latest/pypy-latest-prebuild.tgz
+RUN tar -C /usr/bin -zxf /tmp/pypy.tgz
+RUN mv /usr/bin/pypy/bin/libpypy3-c.so /usr/bin/pypy/bin/libpypy3-c.so.debug /lib64
 
 # enable in path
 

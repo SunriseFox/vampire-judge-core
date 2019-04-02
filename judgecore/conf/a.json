@@ -1,7 +1,7 @@
 {
   "sid": 10001,
-  "filename": "main.js",
-  "lang": "javascript",
+  "filename": "main.go",
+  "lang": "go",
   "path": {
     "base": null,
     "code": null,
