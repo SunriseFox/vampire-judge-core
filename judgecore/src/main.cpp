@@ -58,7 +58,6 @@ struct THREAD_INFO {
     next = nullptr;
   }
 };
-
 int pid_to_kill = -1;
 int lpipe[2], rpipe[2];
 mode_t code_permission;
@@ -1443,7 +1442,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   finish(AC);
 
   cerr << "should not" << endl;
-  exit(255);
+  finish(SW);
 }
 
 int preprocess(json& j) {
