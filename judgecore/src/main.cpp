@@ -32,6 +32,8 @@
 #include <linux/seccomp.h>
 #include <sys/prctl.h>
 
+#include "includes/defs.h"
+#include "includes/utils.h"
 #include "includes/syscall.h"
 
 #include "json.hpp"
@@ -40,11 +42,6 @@ using json = nlohmann::json;
 #define UNUSED(x) (void)x;
 
 using namespace std;
-
-enum RESULT {AC = 0, PE, WA, CE, RE, ME, TE, OLE, SLE, SW};
-enum LANGUAGE {LANG_C = 0, LANG_CPP, LANG_JAVASCRIPT, LANG_PYTHON, LANG_GO, LANG_TEXT, LANG_PYPY3};
-enum SPJ_MODE {SPJ_NO = 0, SPJ_COMPARE, SPJ_INTERACTIVE};
-enum SECCOMP_POLICY {POLICY_STRICT_SAFE = 0, POLICY_ALLOW_COMMON, POLICY_BESTEFFORT_SANDBOX, POLICY_CUSTOM};
 
 struct THREAD_INFO {
   int pid;
@@ -58,6 +55,7 @@ struct THREAD_INFO {
     next = nullptr;
   }
 };
+
 int pid_to_kill = -1;
 int lpipe[2], rpipe[2];
 mode_t code_permission;
@@ -75,25 +73,6 @@ std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
 int process_forked = 0;
 int max_core = 4;
-
-std::mt19937 rng(std::random_device{}());
-
-std::string random_string( size_t length )
-{
-    auto randchar = []() -> char
-    {
-        const char charset[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-        const size_t max_index = (sizeof(charset) - 1);
-        std::uniform_int_distribution<> dist(0, max_index - 1);
-        return charset[ dist(rng) ];
-    };
-    std::string str(length,0);
-    std::generate_n( str.begin(), length, randchar );
-    return str;
-}
 
 void close_pipe()
 {
@@ -141,40 +120,6 @@ void kill_children(THREAD_INFO * head) {
     kill(head->pid, SIGKILL);
     head = head->next;
   }
-}
-
-int create_folder(string& path) {
-    const int error = system((string("mkdir -p ") + path).c_str ());
-    if (error != 0)
-    {
-        cerr << "create directory at " << path << " failed" << endl;
-        return -1;
-    }
-    return 0;
-}
-
-int delete_file(string& path) {
-    const int error = system((string("rm -rf ") + path).c_str ());
-    if (error != 0)
-    {
-        cerr << "delete file at " << path << " failed" << endl;
-        return -1;
-    }
-    return 0;
-}
-
-std::string readFile(const string& filename) {
-  ifstream in(filename);
-  return static_cast<std::stringstream const&>(std::stringstream() << in.rdbuf()).str();
-}
-
-std::string readFile(const string& filename, std::string::size_type count)
-{
-  ifstream stream(filename);
-  std::string result(count, '\x00');
-  stream.read(&result[0], count);
-  result.resize(stream.gcount());
-  return result;
 }
 
 string getStatusText(RESULT what) {
@@ -444,8 +389,12 @@ int validate_config(json& j) {
       language = LANG_GO;
     } else if(lang_str == "text") {
       language = LANG_TEXT;
-    }else if(lang_str == "pypy3") {
+    } else if(lang_str == "pypy3") {
       language = LANG_PYPY3;
+    } else if(lang_str == "binary") {
+      language = LANG_BINARY;
+    } else if(lang_str == "custom") {
+      language = LANG_CUSTOM;
     } else {
       cerr << "unknown language " << lang_str << endl;
       error = 1;
@@ -461,6 +410,8 @@ int validate_config(json& j) {
       case LANG_GO: language = LANG_GO; break;
       case LANG_TEXT: language = LANG_TEXT; break;
       case LANG_PYPY3: language = LANG_PYPY3; break;
+      case LANG_BINARY: language = LANG_BINARY; break;
+      case LANG_CUSTOM: language = LANG_CUSTOM; break;
       default:
         cerr << "unknown language id" << lang_int << endl;
         error = 1;
@@ -561,7 +512,7 @@ int compile_c_cpp(std::vector<const char*> args) {
       kill(-pid_to_kill, SIGKILL);
     });
     int status;
-    wait(&status);
+    waitpid(pid, &status, 0);
     int sec = compile_timeout - alarm(0);
     pid_to_kill = 0;
     if (debug)
@@ -576,7 +527,7 @@ int compile_c_cpp(std::vector<const char*> args) {
     }
     result["compiler"] = compile_info;
     if (debug)
-      cout << "compiler return code is : " << status << endl;
+      cout << "compiler return code is: " << status << endl;
     if(status != 0) {
       finish (CE);
     }
@@ -708,6 +659,25 @@ int compile_exec_text (json& j) {
   return 0;
 }
 
+int compile_exec_binary (json& j) {
+  UNUSED(j);
+  copy_file(path["code"], path["exec"]);
+  ofstream exec(path["exec"]);
+  exec << "#! /bin/bash\n";
+  exec << "exec " + path["exec"] << endl;
+  exec.close();
+  return 0;
+}
+
+int compile_exec_custom (json& j) {
+  UNUSED(j);
+  ofstream exec(path["exec"]);
+  exec << "#! /bin/bash\n";
+  exec << "exec cat " + path["code"] << endl;
+  exec.close();
+  return 0;
+}
+
 int generate_exec_args (json& j) {
   int r = -1;
   switch (language) {
@@ -731,6 +701,12 @@ int generate_exec_args (json& j) {
     break;
   case LANG_PYPY3:
     r = compile_exec_pypy3(j);
+    break;
+  case LANG_BINARY:
+    r = compile_exec_binary(j);
+    break;
+  case LANG_CUSTOM:
+    r = compile_exec_custom(j);
     break;
   default:
     result["compiler"] = "unknown language id";
@@ -915,14 +891,13 @@ int trace_thread(int pid, THREAD_INFO* info) {
 
       if ( eax == -38 )
       {
-        enum {ALLOW = 0, TRACE = 1, DENY = 2, KILL = 3};
         int res = validate_syscall(pid, orig_eax);
         if(res == DENY) {
           ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
           ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
           kill(pid, SIGSYS);
           cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
-        } else if (res == TRACE) {
+        } else if (res == SKIP) {
           ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
           cerr << "[" << pid << "] syscall " << orig_eax <<" skipped by validator" << endl;
         } else if (res == KILL) {
@@ -1047,8 +1022,10 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       cout << "special judge command: " << spjcmd << endl;
     int pid = fork();
     if (pid == 0) {
-      int fd = open(extra.at("log").c_str(), O_WRONLY);
-      dup2(fd, STDOUT_FILENO);
+      int fd = open(extra.at("log").c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+      cout << "-----" << fd << endl;
+      if (dup2(fd, STDOUT_FILENO))
+        perror("dup stdout");
       dup2(fd, STDERR_FILENO);
       alarm(10);
       execl (
@@ -1447,7 +1424,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 
 int preprocess(json& j) {
   path["temp"] = j["path"]["temp"].get<string>();
-  delete_file(path["temp"]);
+  remove_folder(path["temp"]);
   create_folder(path["temp"]);
   chmod(path["temp"].c_str(), S_IRWXG|S_IRWXU|S_IXOTH|S_IWOTH);
 

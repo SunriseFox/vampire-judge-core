@@ -23,11 +23,6 @@
 
 using namespace std;
 
-#define ALLOW 0
-#define TRACE 1
-#define DENY 2
-#define KILL 3
-
 enum OP {
   GREATER, EQUAL, LESS, TEST, MASK, SET,
   STARTSWITH, ENDSWITH, CONTAINS, EXACT,
@@ -837,7 +832,7 @@ int validate_syscall (int pid, int syscall) {
   #endif
 
   #ifdef __NR_statfs // 2
-    case __NR_statfs: return TRACE;
+    case __NR_statfs: return SKIP;
   #endif
 
   #ifdef __NR_fstatfs // 0

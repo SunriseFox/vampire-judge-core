@@ -11,15 +11,11 @@ int main(int argc, char** argv) {
   }
   ifstream tdin(argv[1]);
   ifstream tdout(argv[2]);
-  ofstream log(argv[3]);
+  ifstream execout(argv[3]);
   ifstream sandbox(string(argv[4]) + "test.txt");
-
-  cout << sandbox.is_open() << endl;
 
   string r;
   getline(sandbox, r);
-
-  cerr << r << endl;
 
   if (r == "Hello world") return 0;
   return 2;
