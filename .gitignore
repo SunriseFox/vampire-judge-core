@@ -20,4 +20,5 @@ testcase/judge/9002
 testcase/judge/9003
 
 # magic files
-judgecore/conf/seccomp.json
+judgecore/conf/*.json
+!judgecore/conf/default.json

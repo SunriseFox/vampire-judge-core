@@ -1,8 +1,0 @@
-{
-  "debug":true,
-  "base_path": "/mnt/data/",
-  "pid": 1001,
-  "lang": "c++",
-  "code": "/mnt/data/judge/1001.cpp",
-  "target": "/mnt/data/judge/1001"
-}

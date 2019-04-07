@@ -220,6 +220,10 @@ int read_config(int argc, char** argv, json& j) {
   return 0;
 }
 
+string merge_path(json& path, json& array) {
+
+}
+
 int validate_config(json& j) {
 
   int error = 0;
