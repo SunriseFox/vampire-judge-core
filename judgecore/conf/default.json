@@ -1,0 +1,37 @@
+{
+  "debug": false,
+  "pid": null,
+  "sid": null,
+  "filename": null,
+  "lang": "c",
+  "varaint": {
+    "compiler": "gcc",
+    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$EXEC", "$CODE"],
+    "cscript": [],
+    "executable": ["$EXEC"],
+    "eargs": [],
+    "escript": [],
+    "time_limit_multiplier": 1.5,
+    "memory_limit_multiplier": 1.5,
+    "output_limit_multiplier": 1
+  },
+  "max_time": 1000,
+  "max_real_time": 2000,
+  "max_time_total": 30000,
+  "max_memory": 65530,
+  "max_output": 10000000,
+  "max_core": 4,
+  "continue_on": ["accepted", "presentation error", "wrong answer"],
+  "test_case_count": 1,
+  "spj_mode": "no",
+  "path": {
+    "base": "/mnt/data",
+    "code": ["$BASE", "code", "$PID", "$SID", "$FILENAME"],
+    "log": ["$TEMP"],
+    "output": ["$BASE", "result", "$PID", "$SID"],
+    "stdin": ["$BASE", "case", "$PID"],
+    "stdout": ["$STDIN"],
+    "temp": ["$TMP", ["judge-", "$PID", "-", "$SID"]],
+    "spj": ["$BASE", "judge", "$PID"]
+  }
+}

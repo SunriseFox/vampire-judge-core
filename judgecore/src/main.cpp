@@ -995,10 +995,10 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
 
 bool should_continue(json &j, RESULT r)
 {
-  if (j["on_error_continue"].is_boolean())
+  if (j["continue_on"].is_boolean())
     return true;
-  if (j["on_error_continue"].is_array()) {
-    for (const auto& element : j["on_error_continue"]) {
+  if (j["continue_on"].is_array()) {
+    for (const auto& element : j["continue_on"]) {
       if (element.is_string()) {
         if (getStatusText(r) == element.get<string>())
           return true;

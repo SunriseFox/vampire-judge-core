@@ -1,0 +1,183 @@
+[
+  {
+    "id": 0,
+    "name": "c",
+    "ext": "c",
+    "compiler": "gcc",
+    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$EXEC", "$CODE"],
+    "cscript": [],
+    "executable": "$EXEC",
+    "eargs": [],
+    "escript": [],
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 1,
+    "name": "c++",
+    "ext": "cpp",
+    "compiler": "g++",
+    "cargs": ["-DONLINE_JUDGE", "-pthread", "-O2", "-static", "-std=c++14", "-fno-asm", "-Wall", "-Wextra", "-o", "$EXEC", "$CODE"],
+    "cscript": [],
+    "executable": "$EXEC",
+    "eargs": [],
+    "escript": [],
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 2,
+    "name": "javascript",
+    "ext": "js",
+    "compiler": false,
+    "cargs": null,
+    "cscript": null,
+    "executable": "/usr/bin/v8/d8",
+    "eargs": "$CODE",
+    "escript": null,
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 3,
+    "name": "python",
+    "ext": "py",
+    "compiler": "python",
+    "cargs": ["-OO", "$SCRIPT"],
+    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$CODE", ")\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$CODE", "', cfile='", "$EXEC", ".pyc', doraise=True)\n"],
+    "executable": "/usr/bin/pypy/bin/pypy3",
+    "eargs": "$EXEC",
+    "escript": null,
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 4,
+    "name": "go",
+    "ext": "go",
+    "compiler": "go",
+    "cargs": ["build", "-o", "$EXEC", "$CODE"],
+    "cscript": null,
+    "executable": "$EXEC",
+    "eargs": [],
+    "escript": [],
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 5,
+    "name": "text",
+    "ext": "text",
+    "compiler": false,
+    "cargs": null,
+    "cscript": null,
+    "executable": "/bin/cat",
+    "eargs": "$CODE",
+    "escript": [],
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 6,
+    "name": "pypy3",
+    "ext": "py",
+    "compiler": "/usr/bin/pypy/bin/pypy3",
+    "cargs": ["-OO", "$SCRIPT"],
+    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$CODE", ")\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$CODE", "', cfile='", "$EXEC", ".pyc', doraise=True)\n"],
+    "executable": "/usr/bin/pypy/bin/pypy3",
+    "eargs": "$EXEC",
+    "escript": null,
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 7,
+    "ext": "bin",
+    "name": "binary",
+    "compiler": "cp",
+    "cargs": ["$CODE", "$EXEC"],
+    "cscript": null,
+    "executable": "$EXEC",
+    "eargs": [],
+    "escript": [],
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }, {
+    "id": 8,
+    "name": "custom",
+    "ext": null,
+    "compiler": null,
+    "cargs": null,
+    "cscript": null,
+    "executable": null,
+    "eargs": null,
+    "escript": null,
+    "multiplier": {
+      "time": 1,
+      "memory": 1,
+      "output": 1
+    },
+    "adder": {
+      "time": 0,
+      "memory": 0,
+      "output": 0
+    }
+  }
+]
