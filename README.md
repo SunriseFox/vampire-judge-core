@@ -38,10 +38,10 @@
 
 {
   "debug": true, // [false]
-  "sid": 10001, // [undefined]
+  "sid": 10001, // [undefined]，可以是数字或字符串
   "filename": "main.cpp", // [undefined]
   "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go, pypy3
-  "pid": 1001, // [undefined]
+  "pid": 1001, // [undefined]，可以是数字或字符串
   "max_time": 1000, // [1000]
   "max_real_time": 2000, // [max_time + 1000]
   "max_time_total": 30000, // [30000]

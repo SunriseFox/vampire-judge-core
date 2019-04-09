@@ -174,10 +174,25 @@ string getStatusText(RESULT what) {
   throw std::range_error("finish function should not return");
 }
 
-int read_config(int argc, char** argv, json& j) {
+int read_config(int argc, char** argv) {
   if (argc < 2) {
     cerr << "usage: judge [config.json [stdin]]" << endl;
     return -1;
+  }
+
+  {
+    ifstream fin("./conf/default.json");
+
+    if (!fin.is_open()) {
+      cerr << "could not open default config file" << endl;
+      return -1;
+    }
+    try {
+      fin >> config;
+    } catch(...) {
+      cerr << "failed to parse default config file" << endl;
+      return -1;
+    }
   }
 
   for (int i = 1; i < argc; i++) {
@@ -211,183 +226,144 @@ int read_config(int argc, char** argv, json& j) {
     cout << setw(2) << config << endl;
   }
 
+  {
+    ifstream fin("./conf/lang_spec.json");
 
-  ifstream fin("./conf/lang_spec.json");
-
-  if (!fin.is_open()) {
-    cerr << "could not lang spec file" << endl;
-    return -1;
-  }
-  try {
-    fin >> lang_spec;
-  } catch(...) {
-    cerr << "failed to parse lang spec file" << endl;
+    if (!fin.is_open()) {
+      cerr << "could not lang spec file" << endl;
+      return -1;
+    }
+    try {
+      fin >> lang_spec;
+    } catch(...) {
+      cerr << "failed to parse lang spec file" << endl;
+      return -1;
+    }
   }
 
   return 0;
 }
 
-string merge_path(json& path, json& array) {
-
+[[noreturn]] void validation_error(const string& error) {
+  cerr << "caught json error while validating: " << endl;
+  cerr << error << endl;
+  cerr << "It is likely related to the default configuration" << endl;
+  exit(253);
 }
 
-int validate_config(json& j) {
+string merge_array(json& root, json& current, json& array, const string& delim = string(), int depth = 0) {
+  if (array.is_string()) {
+    string str = array.get<string>();
+    if (str.length() != 1 && str.front() == '$') {
+      if (current.count(str.substr(1)))
+        array = str = merge_array(root, current, current[str.substr(1)], string(), depth + 1);
+      else if (root.count(str.substr(1)))
+        array = str = merge_array(root, current, root[str.substr(1)], string(), depth + 1);
+      else
+        cerr << "[warn] undefined reference " << str;
+    }
+    return str;
+  }
 
+  if (array.is_number_unsigned())
+    return to_string(array.get<unsigned>());
+  if (array.is_number_integer())
+    return to_string(array.get<int>());
+  if (array.is_number_float())
+    return to_string(array.get<double>());
+
+  if (!array.is_array()) {
+    throw std::range_error("converting unknown path");
+  }
+  if (depth > 16) {
+    throw std::range_error("possible loop reference detected");
+  }
+
+  stringstream ss;
+  json::iterator it = array.begin();
+  if (it != array.end())
+    ss << merge_array(root, current, *it, string(), depth + 1);
+
+  for (++it; it != array.end(); ++it) {
+    ss << delim << merge_array(root, current, *it, string(), depth + 1);
+  }
+  array = ss.str();
+  return array.get<string>();
+}
+
+int validate_config() {
   int error = 0;
 
   if (debug)
     cout << "validating configuration" << endl;
 
-  if (!j["path"].is_object()) {
-    j["path"] = {};
-  }
+  if (!config["path"].is_object())
+    validation_error("path is not an object");
 
-  if (!j["path"]["base"].is_string()) {
-    if (debug)
-      cout << "base dir defaults to /mnt/data" << endl;
-    j["path"]["base"] = "/mnt/data";
-  }
-
-  string base = j["path"]["base"].get<string>();
-
-  string pid;
-  string sid;
-  string filename;
-
-  if (j["pid"].is_number_integer()
-    && j["pid"].get<int>() >= -1) {
-    pid = to_string(j["pid"].get<int>());
-  }
-
-  if (j["sid"].is_number_integer()
-    && j["sid"].get<int>() >= -1) {
-    sid = to_string(j["sid"].get<int>());
-  }
-
-  if (j["filename"].is_string()) {
-    filename = j["filename"].get<string>();
-  }
-
-  auto get_key = [&](string& key, const string& name)->string& {
-    if (key.empty()) {
-      error = 1;
-      cerr << name << " is not specified or not valid." << endl;
+  auto merge_path = [](const string& key) {
+    try {
+      merge_array(config, config["path"], config["path"][key], "/");
+    } catch (const std::range_error& e) {
+      cerr << "while retriving key " << key << "(" << config["path"][key] << ")"  << endl;
+      cerr << "caught " << e.what() << endl;
+      validation_error(e.what());
     }
-    return key;
   };
 
-  if (!j["path"]["temp"].is_string()) {
-    j["path"]["temp"] = "/tmp/judge-" + get_key(pid, "pid->temp") + "-" + get_key(sid, "sid->temp") + "/";
-  }
-  if (!j["path"]["output"].is_string()) {
-    j["path"]["output"] = base + "/result/" +  get_key(pid, "pid->output") + "/" + get_key(sid, "sid->output") + "/";
-  }
-  if (!j["path"]["stdin"].is_string()) {
-    j["path"]["stdin"] = base + "/case/" +  get_key(pid, "pid->stdin") + "/";
-  }
-  if (!j["path"]["stdout"].is_string()) {
-    j["path"]["stdout"] = j["path"]["stdin"];
-  }
-  if (!j["path"]["log"].is_string()) {
-    j["path"]["log"] = j["path"]["temp"];
-  }
-  if (!j["path"]["code"].is_string()) {
-    j["path"]["code"] = base + "/code/" +  get_key(pid, "pid->code") + "/" + get_key(sid, "sid->code") + "/" + get_key(filename, "filename->code");
-  }
+  merge_path("base");
+  merge_path("temp");
+  merge_path("output");
+  merge_path("stdin");
+  merge_path("stdout");
+  merge_path("log");
+  merge_path("code");
+  merge_path("exec");
 
-  if (!j["lang"].is_string() && !j["lang"].is_number_integer()) {
+  auto expect_int = [&error](const string& key) -> void {
+    if (!config[key].is_number_integer() || config[key].get<int>() < 0) {
+      cerr << key << " is not an integer" << endl;
+      error = 1;
+    }
+  };
+
+  if (!config["lang"].is_string() && !config["lang"].is_number_integer()) {
     cerr << "lang is not valid" << endl;
     error = 1;
   }
 
-  if (j["max_time"].is_null()) {
-    if (debug)
-      cout << "max time is null, default to 1000ms" << endl;
-    j["max_time"] = 1000;
-  } else if (!j["max_time"].is_number_integer()
-    || j["max_time"].get<int>() < 0) {
-    cerr << "max time is not an integer" << endl;
-    error = 1;
+  expect_int("max_time");
+  expect_int("max_real_time");
+  expect_int("max_time_total");
+  expect_int("max_memory");
+  expect_int("max_output");
+  expect_int("max_thread");
+  expect_int("test_case_count");
+
+  max_thread = config["max_thread"].get<int>();
+
+  if (config["spj_mode"].is_string()) {
+    string str = config["spj_mode"].get<string>();
+    if (str == "compare")
+      spj_mode = SPJ_COMPARE;
+    else if (str == "interactive")
+      spj_mode = SPJ_INTERACTIVE;
+    else if (str == "report")
+      spj_mode = SPJ_REPORT;
+  } else if (config["spj_mode"].is_number_integer()) {
+    int mode = config["spj_mode"].get<int>();
+    if (mode == SPJ_COMPARE) spj_mode = SPJ_COMPARE;
+    else if (mode == SPJ_INTERACTIVE) spj_mode = SPJ_INTERACTIVE;
+    else if (mode == SPJ_REPORT) spj_mode = SPJ_REPORT;
   }
 
-  if (j["max_real_time"].is_null()) {
-    if (debug)
-      cout << "max real time total is null, default to max time + 5000" << endl;
-    j["max_real_time"] = j["max_time"].get<int>() + 5000;
-  } else if (!j["max_real_time"].is_number_integer()
-    || j["max_real_time"].get<int>() < 0) {
-    cerr << "max time total is not an integer" << endl;
-    error = 1;
-  }
-
-  if (j["max_time_total"].is_null()) {
-    if (debug)
-      cout << "max time total is null, default to 30000ms" << endl;
-    j["max_time_total"] = 30000;
-  } else if (!j["max_time_total"].is_number_integer()
-    || j["max_time_total"].get<int>() < 0) {
-    cerr << "max time total is not an integer" << endl;
-    error = 1;
-  }
-
-  if (j["max_memory"].is_null()) {
-    if (debug)
-      cout << "max memory is null, default to 65535 KB" << endl;
-    j["max_memory"] = 65535;
-  } else if (!j["max_memory"].is_number_integer()
-    || j["max_memory"].get<int>() < 0) {
-    cerr << "max memory is not an integer" << endl;
-    error = 1;
-  }
-
-  if (j["max_output"].is_null()) {
-    if (debug)
-      cout << "max output is null, default to 10000000 bytes" << endl;
-    j["max_output"] = 10000000;
-  } else if (!j["max_output"].is_number_integer()
-    || j["max_output"].get<int>() < 0) {
-    cerr << "max_output is not integer number" << endl;
-    error = 1;
-  }
-
-  if (j["max_thread"].is_null()) {
-    if (debug)
-      cout << "max core is null, default to 4" << endl;
-    j["max_thread"] = 4;
-  } else if (!j["max_thread"].is_number_integer()
-    || j["max_thread"].get<int>() < 0) {
-    cerr << "max_thread is not integer number" << endl;
-    error = 1;
-  }
-
-  max_thread = j["max_thread"].get<int>();
-
-  if (!j["test_case_count"].is_number_integer()
-    || j["test_case_count"].get<int>() < -1) {
-    cerr << "test case count is not acceptable" << endl;
-    error = 1;
-  }
-
-  if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "compare")
-    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 1)) {
-    spj_mode = SPJ_COMPARE;
-  } else if ((j["spj_mode"].is_string() && j["spj_mode"].get<string>() == "interactive")
-    || (j["spj_mode"].is_number_integer() && j["spj_mode"].get<int>() == 2)) {
-    spj_mode = SPJ_INTERACTIVE;
+  if (spj_mode != SPJ_NO && spj_mode != SPJ_REPORT) {
+    merge_path("spj");
   } else {
-    spj_mode = SPJ_NO;
+    config["path"]["spj"] = "";
   }
 
-  if (spj_mode != SPJ_NO) {
-    if (!j["path"]["spj"].is_string())
-      j["path"]["spj"] = base + "/judge/" +  get_key(pid, "pid->spj");
-  } else {
-    j["path"]["spj"] = "";
-  }
-
-
-  if (j["lang"].is_string()) {
-    string lang_str = j["lang"].get<string>();
+  if (config["lang"].is_string()) {
+    string lang_str = config["lang"].get<string>();
     if(lang_str == "c") {
       language = LANG_C;
     } else if(lang_str == "c++") {
@@ -410,8 +386,8 @@ int validate_config(json& j) {
       cerr << "unknown language " << lang_str << endl;
       error = 1;
     }
-  } else if (j["lang"].is_number_integer()) {
-    int lang_int = j["lang"].get<int>();
+  } else if (config["lang"].is_number_integer()) {
+    int lang_int = config["lang"].get<int>();
     switch (lang_int)
     {
       case LANG_C: language = LANG_C; break;
@@ -434,7 +410,7 @@ int validate_config(json& j) {
     cout << "configuration validated with code " << error << endl;
 
   if (debug)
-    cout << setw(2) << j << endl;
+    cout << setw(2) << config << endl;
 
   return error;
 }
@@ -1500,10 +1476,10 @@ int preprocess(json& j) {
 int main (int argc, char** argv) try {
   initialize(syscall_name);
 
-  if (read_config(argc, argv, config))
+  if (read_config(argc, argv))
     exit(255);
 
-  if (validate_config(config))
+  if (validate_config())
     exit(255);
 
   preprocess(config);

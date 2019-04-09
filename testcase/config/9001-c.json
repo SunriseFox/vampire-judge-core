@@ -1,6 +1,6 @@
 {
   "debug": true,
   "path": {
-    "base": "/mnt/data/"
+    "base": "/mnt/data"
   }
 }

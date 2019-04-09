@@ -1,14 +1,5 @@
 {
   "sid": 10001,
   "filename": "main.cpp",
-  "lang": "c++",
-  "path": {
-    "base": null,
-    "code": null,
-    "log": null,
-    "output": null,
-    "stdin": null,
-    "stdout": null,
-    "temp": null
-  }
+  "lang": "c++"
 }

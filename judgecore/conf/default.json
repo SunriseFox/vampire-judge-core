@@ -6,9 +6,9 @@
   "lang": "c",
   "varaint": {
     "compiler": "gcc",
-    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$EXEC", "$CODE"],
+    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
     "cscript": [],
-    "executable": ["$EXEC"],
+    "executable": ["$exec"],
     "eargs": [],
     "escript": [],
     "time_limit_multiplier": 1.5,
@@ -26,12 +26,13 @@
   "spj_mode": "no",
   "path": {
     "base": "/mnt/data",
-    "code": ["$BASE", "code", "$PID", "$SID", "$FILENAME"],
-    "log": ["$TEMP"],
-    "output": ["$BASE", "result", "$PID", "$SID"],
-    "stdin": ["$BASE", "case", "$PID"],
-    "stdout": ["$STDIN"],
-    "temp": ["$TMP", ["judge-", "$PID", "-", "$SID"]],
-    "spj": ["$BASE", "judge", "$PID"]
+    "code": ["$base", "code", "$pid", "$sid", "$filename"],
+    "log": ["$temp"],
+    "output": ["$base", "result", "$pid", "$sid"],
+    "stdin": ["$base", "case", "$pid"],
+    "stdout": ["$stdin"],
+    "temp": ["/tmp", ["judge-", "$pid", "-", "$sid"]],
+    "exec": ["$temp", "main"],
+    "spj": ["$base", "judge", "$pid"]
   }
 }
