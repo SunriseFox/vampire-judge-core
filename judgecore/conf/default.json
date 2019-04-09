@@ -4,13 +4,12 @@
   "sid": null,
   "filename": null,
   "lang": "c",
-  "varaint": {
+  "variant": {
     "compiler": "gcc",
     "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
     "cscript": [],
-    "executable": ["$exec"],
+    "executable": "$exec",
     "eargs": [],
-    "escript": [],
     "time_limit_multiplier": 1.5,
     "memory_limit_multiplier": 1.5,
     "output_limit_multiplier": 1

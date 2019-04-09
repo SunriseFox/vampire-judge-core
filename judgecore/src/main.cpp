@@ -10,6 +10,7 @@
 #include <mutex>
 #include <thread>
 #include <random>
+#include <climits>
 
 #include <signal.h>
 #include <unistd.h>
@@ -62,7 +63,6 @@ mode_t code_permission;
 
 bool debug = false;
 SPJ_MODE spj_mode = SPJ_NO;
-LANGUAGE language;
 
 map<string, string> path;
 map <int, string> syscall_name;
@@ -74,7 +74,8 @@ int max_thread = 4;
 
 json result;
 json config;
-json lang_spec;
+json lang_spec; // convert to null if found
+json language;
 
 
 void close_pipe()
@@ -332,7 +333,11 @@ int validate_config() {
   }
 
   expect_int("max_time");
+  if(!config.count("max_real_time"))
+    config["max_real_time"] = config["max_time"].get<int>() + 1000;
   expect_int("max_real_time");
+  if(!config.count("max_time_total"))
+    config["max_time_total"] = 30000;
   expect_int("max_time_total");
   expect_int("max_memory");
   expect_int("max_output");
@@ -363,47 +368,26 @@ int validate_config() {
   }
 
   if (config["lang"].is_string()) {
-    string lang_str = config["lang"].get<string>();
-    if(lang_str == "c") {
-      language = LANG_C;
-    } else if(lang_str == "c++") {
-      language = LANG_CPP;
-    } else if(lang_str == "javascript") {
-      language = LANG_JAVASCRIPT;
-    } else if(lang_str == "python") {
-      language = LANG_PYTHON;
-    } else if(lang_str == "go") {
-      language = LANG_GO;
-    } else if(lang_str == "text") {
-      language = LANG_TEXT;
-    } else if(lang_str == "pypy3") {
-      language = LANG_PYPY3;
-    } else if(lang_str == "binary") {
-      language = LANG_BINARY;
-    } else if(lang_str == "custom") {
-      language = LANG_CUSTOM;
-    } else {
-      cerr << "unknown language " << lang_str << endl;
-      error = 1;
+    string lang_name = config["lang"].get<string>();
+    for (auto& lang: lang_spec) {
+      if (lang["name"] == lang_name) {
+        language = lang;
+        break;
+      }
     }
   } else if (config["lang"].is_number_integer()) {
-    int lang_int = config["lang"].get<int>();
-    switch (lang_int)
-    {
-      case LANG_C: language = LANG_C; break;
-      case LANG_CPP: language = LANG_CPP; break;
-      case LANG_JAVASCRIPT: language = LANG_JAVASCRIPT; break;
-      case LANG_PYTHON: language = LANG_PYTHON; break;
-      case LANG_GO: language = LANG_GO; break;
-      case LANG_TEXT: language = LANG_TEXT; break;
-      case LANG_PYPY3: language = LANG_PYPY3; break;
-      case LANG_BINARY: language = LANG_BINARY; break;
-      case LANG_CUSTOM: language = LANG_CUSTOM; break;
-      default:
-        cerr << "unknown language id" << lang_int << endl;
-        error = 1;
+    int lang_id = config["lang"].get<int>();
+    for (auto& lang: lang_spec) {
+      if (lang["id"] == lang_id) {
+        language = lang;
         break;
+      }
     }
+  }
+
+  if (language.is_null()) {
+    cerr << "unknown language" << config["lang"] << endl;
+    error = 1;
   }
 
   if (debug)
@@ -427,20 +411,17 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
     _exit(255);
   }
 
-  if (language != LANG_JAVASCRIPT) {
-    rlimits.rlim_cur = memory_limit * 1024 * 2;
-    rlimits.rlim_max = memory_limit * 1024 * 2 * 2;
-    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-      cerr << "set memory limit failed, " << r << endl;
-      _exit(255);
-    }
-  } else {
-    rlimits.rlim_cur = 0x7fffffff;
-    rlimits.rlim_max = 0x7fffffff;
-    if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
-      cerr << "set memory limit failed, " << r << endl;
-      _exit(255);
-    }
+  if (__builtin_mul_overflow(memory_limit, 4096l, &rlimits.rlim_max)) {
+    rlimits.rlim_max = LONG_MAX;
+  }
+
+  if (__builtin_mul_overflow(memory_limit, 2048l, &rlimits.rlim_cur)) {
+    rlimits.rlim_cur = LONG_MAX;
+  }
+
+  if ((r = setrlimit(RLIMIT_AS, &rlimits))) {
+    cerr << "set memory limit failed, " << r << endl;
+    _exit(255);
   }
 
   rlimits.rlim_cur = output_limit;
@@ -453,7 +434,7 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
   return 0;
 }
 
-int compile_c_cpp(std::vector<const char*> args) {
+int compile_general(std::vector<const char*> args) {
   if (debug) {
     cout << "compiler command: ";
     for (const auto& i: args) {
@@ -461,6 +442,7 @@ int compile_c_cpp(std::vector<const char*> args) {
     }
     cout << endl;
   }
+  args.push_back(nullptr);
 
   pid_t pid = fork();
   if(pid == -1) {
@@ -485,222 +467,141 @@ int compile_c_cpp(std::vector<const char*> args) {
       cerr << "set euid failed!" << endl;
       raise(SIGSYS);
     }
-    args.push_back(nullptr);
     if (execvp(args[0], const_cast<char**>(&args[0])))
       perror("while exec") ;
     raise(SIGSYS);
+  }
+
+  int compile_timeout = 12;
+  alarm(compile_timeout);
+  pid_to_kill = pid;
+  signal(SIGALRM, [](int) {
+    if (debug)
+      cout << "received sigalrm (compiler timeout)" << endl;
+    kill(-pid_to_kill, SIGKILL);
+  });
+  int status;
+  waitpid(pid, &status, 0);
+  int sec = compile_timeout - alarm(0);
+  pid_to_kill = 0;
+  if (debug)
+    cout << "compile time is " << sec << " seconds" << endl;
+
+  string compile_info = readFile(path["cmpinfo"], 5000);
+  if(!WIFEXITED(status)) {
+    compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
+    status = WTERMSIG(status);
   } else {
-    int compile_timeout = 12;
-    alarm(compile_timeout);
-    pid_to_kill = pid;
-    signal(SIGALRM, [](int) {
-      if (debug)
-        cout << "received sigalrm (compiler timeout)" << endl;
-      kill(-pid_to_kill, SIGKILL);
-    });
-    int status;
-    waitpid(pid, &status, 0);
-    int sec = compile_timeout - alarm(0);
-    pid_to_kill = 0;
-    if (debug)
-      cout << "compile time is " << sec << " seconds" << endl;
-
-    string compile_info = readFile(path["cmpinfo"], 5000);
-    if(!WIFEXITED(status)) {
-      compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
-      status = WTERMSIG(status);
-    } else {
-      status = WEXITSTATUS(status);
-    }
-    result["compiler"] = compile_info;
-    if (debug)
-      cout << "compiler return code is: " << status << endl;
-    if(status != 0) {
-      finish (CE);
-    }
-    return 0;
+    status = WEXITSTATUS(status);
   }
-  // should not
-  raise(SIGSYS);
-  return -1;
-}
-
-int compile_exec_c (json& j) {
-  UNUSED(j);
+  result["compiler"] = compile_info;
   if (debug)
-    cout << "language is c" << endl;
-  const std::vector<const char*>  args = {
-    "gcc", "-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o",
-    path["exec"].c_str(), path["code"].c_str()
-  };
-  return compile_c_cpp(args);
-}
-
-int compile_exec_cpp (json& j) {
-  UNUSED(j);
-  if (debug)
-    cout << "language is cpp" << endl;
-
-  const std::vector<const char*>  args = {
-     "g++", "-DONLINE_JUDGE", "-pthread", "-O2", "-static", "-std=c++14", "-fno-asm", "-Wall", "-Wextra", "-o",
-     path["exec"].c_str(), path["code"].c_str()
-  };
-  return compile_c_cpp(args);
-}
-
-int compile_exec_javascript (json& j) {
-  UNUSED(j);
-  if (debug)
-    cout << "language is javascript, skip compile" << endl;
-
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec /usr/bin/v8/d8 " + path["code"]  << endl;
-  exec.close();
-  return 0;
-}
-
-int compile_exec_python (json& j) {
-  UNUSED(j);
-  ofstream script(path["temp"] + "compile_script.py");
-  script << "from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('";
-  script << path["code"] << "')";
-  script <<
-R"+(
-badmodules = []
-if len(finder.badmodules) is 0:
-  pass
-else:
-  for package in finder.badmodules:
-    if '__main__' in finder.badmodules[package]:
-      badmodules.append(package)
-if len(badmodules) is not 0:
-  raise ModuleNotFoundError(' '.join(badmodules))
-)+";
-  script << "import py_compile\npy_compile.compile('";
-  script << path["code"] << "', cfile='" << path["exec"];
-  script << ".pyc', doraise=True)" << endl;
-  script.close();
-
-  const std::vector<const char*>  args = {
-    "python3", "-OO", (path["temp"] + "compile_script.py").c_str(),
-  };
-  int r = compile_c_cpp(args);
-  if (r) return r;
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec python3 " + path["exec"] + ".pyc" << endl;
-  exec.close();
-  return 0;
-}
-
-int compile_exec_pypy3 (json& j) {
-  UNUSED(j);
-  ofstream script(path["temp"] + "compile_script.py");
-
-  script << "from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('";
-  script << path["code"] << "')";
-  script <<
-R"+(
-badmodules = []
-if len(finder.badmodules) is 0:
-  pass
-else:
-  for package in finder.badmodules:
-    if '__main__' in finder.badmodules[package]:
-      badmodules.append(package)
-if len(badmodules) is not 0:
-  raise ModuleNotFoundError(' '.join(badmodules))
-)+";
-  script << "import py_compile\npy_compile.compile('";
-  script << path["code"] << "', cfile='" << path["exec"];
-  script << ".pyc', doraise=True)" << endl;
-  script.close();
-
-  const std::vector<const char*>  args = {
-    "/usr/bin/pypy/bin/pypy3", "-OO", (path["temp"] + "compile_script.py").c_str(),
-  };
-  int r = compile_c_cpp(args);
-  if (r) return r;
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec /usr/bin/pypy/bin/pypy3 " + path["exec"] + ".pyc" << endl;
-  exec.close();
-  return 0;
-}
-
-int compile_exec_go (json& j) {
-  UNUSED(j);
-  const std::vector<const char*>  args = {
-    "go", "build", "-o", path["exec"].c_str(), path["code"].c_str()
-  };
-  return compile_c_cpp(args);
-}
-
-int compile_exec_text (json& j) {
-  UNUSED(j);
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec cat " + path["code"] << endl;
-  exec.close();
-  return 0;
-}
-
-int compile_exec_binary (json& j) {
-  UNUSED(j);
-  copy_file(path["code"], path["exec"]);
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec " + path["exec"] << endl;
-  exec.close();
-  return 0;
-}
-
-int compile_exec_custom (json& j) {
-  UNUSED(j);
-  ofstream exec(path["exec"]);
-  exec << "#! /bin/bash\n";
-  exec << "exec cat " + path["code"] << endl;
-  exec.close();
-  return 0;
-}
-
-int generate_exec_args (json& j) {
-  int r = -1;
-  switch (language) {
-  case LANG_C:
-    r = compile_exec_c(j);
-    break;
-  case LANG_CPP:
-    r = compile_exec_cpp(j);
-    break;
-  case LANG_JAVASCRIPT:
-    r = compile_exec_javascript(j);
-    break;
-  case LANG_PYTHON:
-    r = compile_exec_python(j);
-    break;
-  case LANG_GO:
-    r = compile_exec_go(j);
-    break;
-  case LANG_TEXT:
-    r = compile_exec_text(j);
-    break;
-  case LANG_PYPY3:
-    r = compile_exec_pypy3(j);
-    break;
-  case LANG_BINARY:
-    r = compile_exec_binary(j);
-    break;
-  case LANG_CUSTOM:
-    r = compile_exec_custom(j);
-    break;
-  default:
-    result["compiler"] = "unknown language id";
-    finish(CE);
+    cout << "compiler return code is: " << status << endl;
+  if(status != 0) {
+    finish (CE);
   }
-  if (r)
-    finish(CE);
+  return 0;
+}
+
+int generate_exec_args () {
+  do {
+    // generate compile script, then set $script to that file
+    // we don't execute the script.
+    if (language["cscript"].is_boolean())
+      break;
+
+    if (language["cscript"].is_null())
+      language["cscript"] = config["variant"]["cscript"];
+    if (language["cscript"].is_null())
+      break;
+
+    merge_array(config, config["path"], language["cscript"]);
+
+    if (debug) {
+      cout << "compile sripts is:" << endl;
+      cout << language["cscript"].get<string>() << endl;
+    }
+
+    string filename = path["temp"] + ".cscript";
+
+    ofstream fout(filename);
+    fout << language["cscript"].get<string>() << endl;
+
+    if (!fout) {
+      result["compiler"] = "write compile script failed";
+      finish(CE);
+    }
+
+    path["script"] = filename;
+  } while(false);
+
+  cout << 1 << endl;
+
+  do {
+    if (language["cscript"].is_boolean())
+      break;
+
+    if (language["compiler"].is_null())
+      language["compiler"] = config["variant"]["compiler"];
+
+    merge_array(config, config["path"], language["compiler"]);
+
+    if (language["cargs"].is_null())
+      language["cargs"] = config["variant"]["cargs"];
+
+    if (!language["cargs"].is_array())
+      language["cargs"] = json::array();
+
+    for (auto& el: language["cargs"])
+      merge_array(config, config["path"], el);
+
+    std::vector<const char*> args = {
+      language["compiler"].get<string>().c_str()
+    };
+
+    for (auto& el: language["cargs"]) {
+      args.push_back(el.get<string>().c_str());
+    }
+
+    if (compile_general(args)) {
+      finish(CE);
+    };
+  } while(false);
+
+  cout << 2 << endl;
+
+  do {
+    if (language["executable"].is_null())
+      language["executable"] = config["variant"]["executable"];
+    if (language["executable"].is_null())
+      language["executable"] = "$exec";
+
+    if (language["executable"].is_array()) {
+      // if executable is an array, we treat it as script and prepare the $exec
+      merge_array(config, config["path"], language["executable"]);
+
+      if (debug) {
+        cout << "executable sripts is:" << endl;
+        cout << language["executable"].get<string>() << endl;
+      }
+
+      ofstream fout(path["exec"]);
+      fout << language["executable"].get<string>() << endl;
+
+      if (!fout) {
+        result["compiler"] = "write executable script failed";
+        finish(CE);
+      }
+    }
+  } while(false);
+
+  if (language["eargs"].is_null())
+    language["eargs"] = config["variant"]["eargs"];
+  if (!language["eargs"].is_array())
+    language["eargs"] = json::array();
+
+  cout << 3 << endl;
+
   return 0;
 }
 
@@ -976,12 +877,12 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
   return 0;
 }
 
-bool should_continue(json &j, RESULT r)
+bool should_continue(RESULT r)
 {
-  if (j["continue_on"].is_boolean())
+  if (config["continue_on"].is_boolean())
     return true;
-  if (j["continue_on"].is_array()) {
-    for (const auto& element : j["continue_on"]) {
+  if (config["continue_on"].is_array()) {
+    for (const auto& element : config["continue_on"]) {
       if (element.is_string()) {
         if (getStatusText(r) == element.get<string>())
           return true;
@@ -998,8 +899,7 @@ bool should_continue(json &j, RESULT r)
   return true;
 }
 
-RESULT do_compare(json& j, const map<string, string>& extra) {
-  UNUSED(j);
+RESULT do_compare(const map<string, string>& extra) {
   if (spj_mode == SPJ_COMPARE) {
     // should do spj
     string spjcmd = path.at("spj") + " " + extra.at("stdin") + " "
@@ -1065,14 +965,14 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   return SW;
 }
 
-[[ noreturn ]] void do_test(json& j) {
-  int time_limit = j["max_time"].get<int>();
-  int real_time_limit = j["max_real_time"].get<int>() / 1000 + 1;
-  int total_time_limit = j["max_time_total"].get<int>();
-  int memory_limit = j["max_memory"].get<int>();
-  int output_limit = j["max_output"].get<int>();
+[[ noreturn ]] void do_test() {
+  int time_limit = config["max_time"].get<int>();
+  int real_time_limit = config["max_real_time"].get<int>() / 1000 + 1;
+  int total_time_limit = config["max_time_total"].get<int>();
+  int memory_limit = config["max_memory"].get<int>();
+  int output_limit = config["max_output"].get<int>();
 
-  int cases = j["test_case_count"].get<int>();
+  int cases = config["test_case_count"].get<int>();
 
   int total_time = 0;
   int max_memory = 0;
@@ -1091,6 +991,15 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
     cout << "exec is: " << path["exec"] << endl;
 
   for (int c = 1; c <= cases; c++) {
+    config["case"] = c;
+    json eargs = language["eargs"];
+    vector<const char*> args = { path["exec"].c_str() };
+    for (auto& el: eargs) {
+      merge_array(config, config["path"], el);
+      args.push_back(el.get<string>().c_str());
+    }
+    args.push_back(nullptr);
+
     string cs = to_string(c);
 
     map<string, string> extra;
@@ -1154,7 +1063,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
 
         load_seccomp_tracee();
 
-        execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
+        execvp(args[0], const_cast<char**>(&args[0]));
 
         cerr << "child process B exec failed" << endl;
         exit(255);
@@ -1257,7 +1166,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       total_time += case_result.time;
       max_memory = max(case_result.memory, max_memory);
 
-      if (!should_continue(j, rs)) {
+      if (!should_continue(rs)) {
         fatal_status = rs;
         break;
       }
@@ -1311,7 +1220,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
           exit(255);
         };
 
-        execlp(path["exec"].c_str(), path["exec"].c_str(), nullptr);
+        execvp(args[0], const_cast<char**>(&args[0]));
 
         close(fd_in);
         close(fd_out);
@@ -1367,7 +1276,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       } else if (case_result.memory > memory_limit){
         rs = ME;
       } else {
-        rs = do_compare(j, extra);
+        rs = do_compare(extra);
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
@@ -1376,7 +1285,7 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
       total_time += case_result.time;
       max_memory = max(case_result.memory, max_memory);
 
-      if (!should_continue(j, rs)) {
+      if (!should_continue(rs)) {
         fatal_status = rs;
         break;
       }
@@ -1409,31 +1318,31 @@ RESULT do_compare(json& j, const map<string, string>& extra) {
   finish(SW);
 }
 
-int preprocess(json& j) {
-  path["temp"] = j["path"]["temp"].get<string>();
+int preprocess() {
+  path["temp"] = config["path"]["temp"].get<string>();
   remove_folder(path["temp"]);
   create_folder(path["temp"]);
   chmod(path["temp"].c_str(), S_IRWXG|S_IRWXU|S_IXOTH|S_IWOTH);
 
-  path["output"] = j["path"]["output"].get<string>();
+  path["output"] = config["path"]["output"].get<string>();
   create_folder(path["output"]);
 
-  path["stdin"] = j["path"]["stdin"].get<string>();
-  path["stdout"] = j["path"]["stdout"].get<string>();
+  path["stdin"] = config["path"]["stdin"].get<string>();
+  path["stdout"] = config["path"]["stdout"].get<string>();
 
-  path["log"] = j["path"]["log"].get<string>();
+  path["log"] = config["path"]["log"].get<string>();
 
   // Files
   path["result"] = path["output"] + "/result.json";
 
-  path["code"] = j["path"]["code"].get<string>();
+  path["code"] = config["path"]["code"].get<string>();
 
   path["exec"] = path["temp"] + "/main";
   unlink(path["exec"].c_str());
   ofstream(path["exec"]).close();
   chmod(path["exec"].c_str(), S_IRWXG|S_IRWXU|S_IRWXO);
 
-  path["spj"] = j["path"]["spj"];
+  path["spj"] = config["path"]["spj"];
 
   path["cmpinfo"] = path["output"] + "/result.cmpinfo";
   unlink(path["cmpinfo"].c_str ());
@@ -1460,14 +1369,47 @@ int preprocess(json& j) {
     chmod(path.at("code").c_str(), code_permission | S_IROTH);
   }
 
-  // make something special for javascript, pypy3
-  int orig_mem = j["max_memory"].get<int>();
-  if (language == LANG_JAVASCRIPT) {
-    j["max_memory"] = max(orig_mem, 524288); // 512 M
-  } else if (language == LANG_PYPY3) {
-    j["max_memory"] = max(orig_mem, orig_mem * 3); // 3 times
-  }
+  // make something special for javascript, pypy3, etc.
+  if (language["patch"].is_object()) {
+    for (auto& el: language["patch"].items()) {
 
+      cout << 2 << endl;
+      string orig_key;
+      int orig_val;
+      if (el.key().back() == '+' || el.key().back() == '*') {
+        orig_key = el.key().substr(0, el.key().length() - 1);
+      } else {
+        orig_key = el.key();
+      }
+      if (config.count(orig_key) && config[orig_key].is_number_integer()) {
+        config[orig_key].get_to(orig_val);
+      } else {
+        cerr << "unknown patch rule for: " << orig_key << endl;
+        return -1;
+      }
+      int c;
+      if (el.key().back() == '+') {
+        if(__builtin_add_overflow(orig_val, el.value().get<int>(), &c)) {
+          if (c < 0) config[orig_key] = INT_MAX;
+          if (c > 0) config[orig_key] = 0;
+        } else {
+          config[orig_key] = c;
+        };
+      } else if (el.key().back() == '*') {
+        if(__builtin_mul_overflow(orig_val, el.value().get<int>(), &c)) {
+          config[orig_key] = INT_MAX;
+        } else {
+          config[orig_key] = c;
+        };
+      } else {
+        config[orig_key] = el.value();
+      }
+      if (debug)
+        cout << "patched " << el.key() << "(" << el.value() << ") to " << config[orig_key] << endl;
+    }
+  }
+  if (debug)
+    cout << "preprocessed ok.";
   return 0;
 }
 
@@ -1476,20 +1418,16 @@ int preprocess(json& j) {
 int main (int argc, char** argv) try {
   initialize(syscall_name);
 
-  if (read_config(argc, argv))
+  if (read_config(argc, argv) || validate_config() || preprocess()) {
     exit(255);
+  }
 
-  if (validate_config())
-    exit(255);
-
-  preprocess(config);
-
-  // compile source or check syntax, this function won't fail
-  generate_exec_args(config);
+  // compile source or check syntax, this function won't fail(?)
+  generate_exec_args();
 
   // do test
   mount("none", path["sandbox"].c_str(), "tmpfs", MS_NOATIME |  MS_NODEV | MS_NODIRATIME | MS_NOEXEC | MS_NOSUID, "");
-  do_test(config);
+  do_test();
 
   throw std::range_error("main function should no return");
 
