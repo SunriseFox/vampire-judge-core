@@ -17,5 +17,7 @@
     "fs": {
       "hello.txt": "Hello world!\n"
     }
+  }, {
+    "stdin": "3 4\n"
   }]
 }

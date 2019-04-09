@@ -1018,7 +1018,7 @@ RESULT do_compare(const map<string, string>& extra) {
       extra["stdin"] = path.at("temp") + "/inline-" + cs + ".in";
       extra["stdout"] = "/dev/null";
       extra["output"] = path.at("temp") + "/inline-" + cs + ".out";
-      if(config["inline"].is_array() && config["inline"].size() >= c) {
+      if(config["inline"].is_array() && config["inline"].size() >= static_cast<json::size_type>(c)) {
         auto& case_inline = config["inline"][c-1];
         if (case_inline["stdin"].is_string()) {
           ofstream fout(extra["stdin"]);
@@ -1327,15 +1327,15 @@ RESULT do_compare(const map<string, string>& extra) {
           DIR *d = opendir(path.at("sandbox").c_str());
           if (d) {
             while ((dir = readdir(d)) != NULL) {
+            string filename = path.at("sandbox") + "/" + dir->d_name;
               if (dir->d_type == DT_REG) {
-                string filename = path.at("sandbox") + "/" + dir->d_name;
                 stat(filename.c_str(), &sb);
                 if (sb.st_uid == 99 && sb.st_gid == 99) {
                   string content = readFile(filename, 1000);
-                  unlink(filename.c_str());
                   r["inline"][dir->d_name] = content;
                 }
               }
+              unlink(filename.c_str());
             }
             closedir(d);
           }
