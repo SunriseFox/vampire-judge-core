@@ -1321,28 +1321,33 @@ RESULT do_compare(const map<string, string>& extra) {
       } else {
         if (spj_mode == SPJ_INLINE) {
           rs = AC;
-          struct dirent *dir;
-          struct stat sb;
-          r["inline"] = json::object();
-          DIR *d = opendir(path.at("sandbox").c_str());
-          if (d) {
-            while ((dir = readdir(d)) != NULL) {
-            string filename = path.at("sandbox") + "/" + dir->d_name;
-              if (dir->d_type == DT_REG) {
-                stat(filename.c_str(), &sb);
-                if (sb.st_uid == 99 && sb.st_gid == 99) {
-                  string content = readFile(filename, 1000);
-                  r["inline"][dir->d_name] = content;
-                }
-              }
-              unlink(filename.c_str());
-            }
-            closedir(d);
-          }
-          r["inline"]["stdout"] = readFile(extra.at("output"), 1000);
         } else {
           rs = do_compare(extra);
         }
+      }
+      if (spj_mode == SPJ_INLINE) {
+        struct dirent *dir;
+        struct stat sb;
+        r["inline"] = json::object();
+        DIR *d = opendir(path.at("sandbox").c_str());
+        if (d) {
+          r["inline"]["fs"] = json::object();
+          while ((dir = readdir(d)) != NULL) {
+          string filename = path.at("sandbox") + "/" + dir->d_name;
+            if (dir->d_type == DT_REG) {
+              stat(filename.c_str(), &sb);
+              if (sb.st_uid == 99 && sb.st_gid == 99) {
+                string content = readFile(filename, 1000);
+                r["inline"]["fs"][dir->d_name] = content;
+              }
+            }
+            unlink(filename.c_str());
+          }
+          closedir(d);
+        }
+        if (r["inline"]["fs"].size() == 0)
+          r["inline"].erase("fs");
+        r["inline"]["stdout"] = readFile(extra.at("output"), 1000);
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
