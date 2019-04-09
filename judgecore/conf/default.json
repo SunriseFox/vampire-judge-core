@@ -18,7 +18,7 @@
   "max_output": 10000000,
   "max_thread": 4,
   "continue_on": ["accepted", "presentation error"],
-  "test_case_count": 0,
+  "test_case_count": 1,
   "spj_mode": "no",
   "path": {
     "base": "/mnt/data",

@@ -352,16 +352,16 @@ int validate_config() {
       spj_mode = SPJ_COMPARE;
     else if (str == "interactive")
       spj_mode = SPJ_INTERACTIVE;
-    else if (str == "report")
-      spj_mode = SPJ_REPORT;
+    else if (str == "inline")
+      spj_mode = SPJ_INLINE;
   } else if (config["spj_mode"].is_number_integer()) {
     int mode = config["spj_mode"].get<int>();
     if (mode == SPJ_COMPARE) spj_mode = SPJ_COMPARE;
     else if (mode == SPJ_INTERACTIVE) spj_mode = SPJ_INTERACTIVE;
-    else if (mode == SPJ_REPORT) spj_mode = SPJ_REPORT;
+    else if (mode == SPJ_INLINE) spj_mode = SPJ_INLINE;
   }
 
-  if (spj_mode != SPJ_NO && spj_mode != SPJ_REPORT) {
+  if (spj_mode != SPJ_NO && spj_mode != SPJ_INLINE) {
     merge_path("spj");
   } else {
     config["path"]["spj"] = "";
@@ -546,6 +546,12 @@ int generate_exec_args () {
 
     if (language["cargs"].is_null())
       language["cargs"] = config["variant"]["cargs"];
+
+    if (language["cargs"].is_string()) {
+      string str = language["cargs"].get<string>();
+      language["cargs"] = json::array();
+      language["cargs"].push_back(str);
+    }
 
     if (!language["cargs"].is_array())
       language["cargs"] = json::array();
