@@ -30,5 +30,11 @@
     "temp": ["/tmp", ["judge-", "$pid", "-", "$sid"]],
     "exec": ["$temp", "main"],
     "spj": ["$base", "judge", "$pid"]
-  }
+  },
+  "inline": [{
+    "stdin": "1 2\n",
+    "fs": {
+      "hello.txt": "Hello world!\n"
+    }
+  }]
 }

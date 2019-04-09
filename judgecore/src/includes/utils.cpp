@@ -19,7 +19,7 @@ string random_string(size_t length)
     return str;
 }
 
-int create_folder(string& path) {
+int create_folder(const string& path) {
   int pid = fork();
   if (pid == 0) {
 
@@ -39,7 +39,7 @@ int create_folder(string& path) {
   return 0;
 }
 
-int remove_folder(string& path) {
+int remove_folder(const string& path) {
   int pid = fork();
   if (pid == 0) {
     execl("/usr/bin/rm", "/usr/bin/rm", "-rf", path.c_str(), nullptr);

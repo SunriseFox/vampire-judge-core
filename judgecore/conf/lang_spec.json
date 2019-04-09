@@ -7,7 +7,7 @@
     "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
     "cscript": [],
     "executable": "$exec",
-    "eargs": []
+    "eargs": null
   }, {
     "id": 1,
     "name": "c++",
@@ -16,7 +16,7 @@
     "cargs": ["-DONLINE_JUDGE", "-pthread", "-O2", "-static", "-std=c++14", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
     "cscript": [],
     "executable": "$exec",
-    "eargs": []
+    "eargs": null
   }, {
     "id": 2,
     "name": "javascript",
@@ -47,7 +47,7 @@
     "cargs": ["build", "-o", "$exec", "$code"],
     "cscript": null,
     "executable": "$exec",
-    "eargs": []
+    "eargs": null
   }, {
     "id": 5,
     "name": "text",
@@ -74,7 +74,7 @@
     "cargs": ["$code", "$exec"],
     "cscript": null,
     "executable": "$exec",
-    "eargs": []
+    "eargs": null
   }, {
     "id": 8,
     "name": "custom",

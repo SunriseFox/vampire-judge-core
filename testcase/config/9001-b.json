@@ -1,5 +1,10 @@
 {
   "sid": 10001,
-  "filename": "main.bin",
-  "lang": "custom"
+  "filename": "main.cpp",
+  "lang": "custom",
+  "variant": {
+    "compiler": "g++",
+    "cargs": ["-std=c++17", "-o", "$exec", "$code"],
+    "eargs": ["1"]
+  }
 }

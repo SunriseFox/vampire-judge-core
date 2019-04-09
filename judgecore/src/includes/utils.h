@@ -16,8 +16,8 @@
 
 using namespace std;
 
-int create_folder(string& path);
-int remove_folder(string& path);
+int create_folder(const string& path);
+int remove_folder(const string& path);
 int copy_file(const string& from, const string& dest);
 string readFile(const string& filename);
 string readFile(const string& filename, std::string::size_type count);

@@ -1013,11 +1013,44 @@ RESULT do_compare(const map<string, string>& extra) {
     string cs = to_string(c);
 
     map<string, string> extra;
-    extra["stdin"] = path["stdin"] + "/" + cs + ".in";
-    if (access(extra["stdin"].c_str(), R_OK)) extra["stdin"] = "/dev/null";
-    extra["stdout"] = path["stdout"] + "/" + cs + ".out";
+
+    if (spj_mode == SPJ_INLINE) {
+      extra["stdin"] = path.at("temp") + "/inline-" + cs + ".in";
+      extra["stdout"] = "/dev/null";
+      extra["output"] = path.at("temp") + "/inline-" + cs + ".out";
+      if(config["inline"].is_array() && config["inline"].size() >= c) {
+        auto& case_inline = config["inline"][c-1];
+        if (case_inline["stdin"].is_string()) {
+          ofstream fout(extra["stdin"]);
+          fout << case_inline["stdin"].get<string>();
+          if (!fout) {
+            extra["stdin"] = "/dev/null";
+          }
+        } else {
+          extra["stdin"] = "/dev/null";
+        }
+        if (case_inline["fs"].is_object()) {
+          for (const auto& el: case_inline["fs"].items()) {
+            string key = el.key();
+            key.erase(0, key.find_last_of('/') + 1);
+            if (key == "..") key = "[insecure filename]";
+            ofstream fout(path.at("sandbox") + "/" + key);
+            fout << el.value().get<string>();
+          }
+        }
+      } else {
+        extra["stdin"] = "/dev/null";
+      }
+    } else {
+      extra["stdin"] = path["stdin"] + "/" + cs + ".in";
+      extra["stdout"] = path["stdout"] + "/" + cs + ".out";
+      extra["output"] = path["output"] + "/" + cs + ".execout";
+    }
+    if (access(extra["stdin"].c_str(), R_OK)) {
+      cerr << extra["stdin"] << "failed at 4" << endl;
+      extra["stdin"] = "/dev/null";
+    }
     if (access(extra["stdout"].c_str(), R_OK)) extra["stdout"] = "/dev/null";
-    extra["output"] = path["output"] + "/" + cs + ".execout";
     extra["log"] = path["log"] + "/" + cs + ".log";
 
     if (debug) {
@@ -1286,7 +1319,30 @@ RESULT do_compare(const map<string, string>& extra) {
       } else if (case_result.memory > memory_limit){
         rs = ME;
       } else {
-        rs = do_compare(extra);
+        if (spj_mode == SPJ_INLINE) {
+          rs = AC;
+          struct dirent *dir;
+          struct stat sb;
+          r["inline"] = json::object();
+          DIR *d = opendir(path.at("sandbox").c_str());
+          if (d) {
+            while ((dir = readdir(d)) != NULL) {
+              if (dir->d_type == DT_REG) {
+                string filename = path.at("sandbox") + "/" + dir->d_name;
+                stat(filename.c_str(), &sb);
+                if (sb.st_uid == 99 && sb.st_gid == 99) {
+                  string content = readFile(filename, 1000);
+                  unlink(filename.c_str());
+                  r["inline"][dir->d_name] = content;
+                }
+              }
+            }
+            closedir(d);
+          }
+          r["inline"]["stdout"] = readFile(extra.at("output"), 1000);
+        } else {
+          rs = do_compare(extra);
+        }
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);

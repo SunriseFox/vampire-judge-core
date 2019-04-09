@@ -118,8 +118,8 @@
   // 语言名或语言 ID
   "lang": "c",
   // 编译器额外配置
-  "variant": {
-    // 字符串，出于安全考虑，只有当 lang_spec 中该项为 null 时才可配置。 false 跳过编译。
+  "variant": { //只有当 lang_spec 中对应项为 null 时才可配置
+    // 字符串。
     "compiler": "gcc",
     // 数组
     "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
