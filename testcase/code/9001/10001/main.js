@@ -1,2 +1,2 @@
-let [a, b] = (await read()).split(' ').map(i => Number(i));
-writeLine(a + b);
+let [a,b] = readline().trim().split(' ').map(i=>Number(i));
+print(a+b);

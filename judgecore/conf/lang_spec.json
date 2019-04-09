@@ -36,9 +36,9 @@
     "ext": "py",
     "compiler": "python",
     "cargs": ["-OO", "$script"],
-    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$code", ")\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$code", "', cfile='", "$exec", ".pyc', doraise=True)\n"],
-    "executable": "/usr/bin/pypy/bin/pypy3",
-    "eargs": "$exec"
+    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$code", "')\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$code", "', cfile='", "$exec", ".pyc', doraise=True)\n"],
+    "executable": "python",
+    "eargs": [["$exec", ".pyc"]]
   }, {
     "id": 4,
     "name": "go",
@@ -63,13 +63,13 @@
     "ext": "py",
     "compiler": "/usr/bin/pypy/bin/pypy3",
     "cargs": ["-OO", "$script"],
-    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$code", ")\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$code", "', cfile='", "$exec", ".pyc', doraise=True)\n"],
+    "cscript": ["from modulefinder import ModuleFinder\nfinder = ModuleFinder()\nfinder.run_script('", "$code", "')\nbadmodules = []\nif len(finder.badmodules) is 0:\n  pass\nelse:\n  for package in finder.badmodules:\n    if '__main__' in finder.badmodules[package]:\n      badmodules.append(package)\nif len(badmodules) is not 0:\n  raise ModuleNotFoundError(' '.join(badmodules))\nimport py_compile\npy_compile.compile('", "$code", "', cfile='", "$exec", ".pyc', doraise=True)\n"],
     "executable": "/usr/bin/pypy/bin/pypy3",
-    "eargs": "$exec"
+    "eargs": [["$exec", ".pyc"]]
   }, {
     "id": 7,
-    "ext": "bin",
     "name": "binary",
+    "ext": "bin",
     "compiler": "cp",
     "cargs": ["$code", "$exec"],
     "cscript": null,

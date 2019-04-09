@@ -1,2 +1,2 @@
 #!/bin/bash
-exec ./judgecore conf/?.json
+exec ./judgecore ../testcase/config/9001-?.json

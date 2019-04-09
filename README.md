@@ -14,6 +14,10 @@
 + OpenVZ 架构虚拟化无法运行这一内核
 + 不是所有的 KVM 都可以运行，必须显式说明 支持 Docker 或嵌套虚拟化的 KVM 才可以执行
 
+### Security Issus
+
++ 编译器仅在部分监视的情况下运行，如果允许用户自定义编译器和编译指令，请务必小心
+
 ### Build
 
 + (Linux) 打开 build.sh，修改 `MOUNTFOLDER` 为本地一个已存在的目录

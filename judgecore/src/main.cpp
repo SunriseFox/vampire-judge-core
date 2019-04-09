@@ -261,7 +261,7 @@ string merge_array(json& root, json& current, json& array, const string& delim =
       else if (root.count(str.substr(1)))
         array = str = merge_array(root, current, root[str.substr(1)], string(), depth + 1);
       else
-        cerr << "[warn] undefined reference " << str;
+        cerr << "[warn] undefined reference " << str << endl;;
     }
     return str;
   }
@@ -282,11 +282,11 @@ string merge_array(json& root, json& current, json& array, const string& delim =
 
   stringstream ss;
   json::iterator it = array.begin();
-  if (it != array.end())
+  if (it != array.end()) {
     ss << merge_array(root, current, *it, string(), depth + 1);
-
-  for (++it; it != array.end(); ++it) {
-    ss << delim << merge_array(root, current, *it, string(), depth + 1);
+    for (++it; it != array.end(); ++it) {
+      ss << delim << merge_array(root, current, *it, string(), depth + 1);
+    }
   }
   array = ss.str();
   return array.get<string>();
@@ -512,7 +512,7 @@ int generate_exec_args () {
 
     if (language["cscript"].is_null())
       language["cscript"] = config["variant"]["cscript"];
-    if (language["cscript"].is_null())
+    if (language["cscript"].size() == 0)
       break;
 
     merge_array(config, config["path"], language["cscript"]);
@@ -532,13 +532,11 @@ int generate_exec_args () {
       finish(CE);
     }
 
-    path["script"] = filename;
+    config["path"]["script"] = filename;
   } while(false);
 
-  cout << 1 << endl;
-
   do {
-    if (language["cscript"].is_boolean())
+    if (language["compiler"].is_boolean())
       break;
 
     if (language["compiler"].is_null())
@@ -568,8 +566,6 @@ int generate_exec_args () {
     };
   } while(false);
 
-  cout << 2 << endl;
-
   do {
     if (language["executable"].is_null())
       language["executable"] = config["variant"]["executable"];
@@ -592,15 +588,21 @@ int generate_exec_args () {
         result["compiler"] = "write executable script failed";
         finish(CE);
       }
+    } else {
+      // if not an array, we still need to merge it
+      merge_array(config, config["path"], language["executable"]);
     }
   } while(false);
 
   if (language["eargs"].is_null())
     language["eargs"] = config["variant"]["eargs"];
+  if (language["eargs"].is_string()) {
+    string str = language["eargs"].get<string>();
+    language["eargs"] = json::array();
+    language["eargs"].push_back(str);
+  }
   if (!language["eargs"].is_array())
     language["eargs"] = json::array();
-
-  cout << 3 << endl;
 
   return 0;
 }
@@ -987,6 +989,8 @@ RESULT do_compare(const map<string, string>& extra) {
     RESULT result;
   } case_result;
 
+  path["exec"] = language["executable"].get<string>();
+
   if (debug)
     cout << "exec is: " << path["exec"] << endl;
 
@@ -1372,8 +1376,6 @@ int preprocess() {
   // make something special for javascript, pypy3, etc.
   if (language["patch"].is_object()) {
     for (auto& el: language["patch"].items()) {
-
-      cout << 2 << endl;
       string orig_key;
       int orig_val;
       if (el.key().back() == '+' || el.key().back() == '*') {
@@ -1409,7 +1411,7 @@ int preprocess() {
     }
   }
   if (debug)
-    cout << "preprocessed ok.";
+    cout << "preprocessed ok." << endl;
   return 0;
 }
 
