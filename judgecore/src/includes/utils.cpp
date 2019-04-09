@@ -22,20 +22,20 @@ string random_string(size_t length)
 int create_folder(string& path) {
   int pid = fork();
   if (pid == 0) {
+
     execl("/usr/bin/mkdir", "/usr/bin/mkdir", "-p", path.c_str(), nullptr);
     exit(1);
   }
   int status;
 
-  if (waitpid(pid, &status, 0)) {
+  if (waitpid(pid, &status, 0) == -1) {
     kill(pid, SIGKILL);
     perror("wait pid");
   }
   if (status != 0) {
-      cerr << "create directory at " << path << " failed" << endl;
-      return -1;
+    cerr << "create directory at " << path << " failed" << endl;
+    return -1;
   }
-  cerr << "create directory at " << path << " ok" << endl;
   return 0;
 }
 
@@ -45,16 +45,15 @@ int remove_folder(string& path) {
     execl("/usr/bin/rm", "/usr/bin/rm", "-rf", path.c_str(), nullptr);
     exit(1);
   }
-  int status;
-  if (waitpid(pid, &status, 0)) {
+  int status = -1;
+  if (waitpid(pid, &status, 0) == -1) {
     kill(pid, SIGKILL);
     perror("wait pid");
   }
   if (status != 0) {
-      cerr << "remove directory at " << path << " failed" << endl;
-      return -1;
+    cerr << "remove directory at " << path << " failed" << endl;
+    return -1;
   }
-  cerr << "remove directory at " << path << " ok" << endl;
   return 0;
 }
 

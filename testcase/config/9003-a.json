@@ -6,7 +6,7 @@
   "max_memory": 65530,
   "max_output": 10000000,
   "max_core": 10,
-  "on_error_continue": ["accepted", "presentation error", "wrong answer"],
+  "continue_on": ["accepted", "presentation error", "wrong answer"],
   "test_case_count": 1,
   "spj_mode": 2,
   "path": {

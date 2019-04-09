@@ -64,15 +64,18 @@ bool debug = false;
 SPJ_MODE spj_mode = SPJ_NO;
 LANGUAGE language;
 
-json result;
-
 map<string, string> path;
 map <int, string> syscall_name;
 
 std::mutex g_tail_mutex;
 THREAD_INFO *tail = nullptr, *info = nullptr;
 int process_forked = 0;
-int max_core = 4;
+int max_thread = 4;
+
+json result;
+json config;
+json lang_spec;
+
 
 void close_pipe()
 {
@@ -172,8 +175,6 @@ string getStatusText(RESULT what) {
 }
 
 int read_config(int argc, char** argv, json& j) {
-  bool has_stdin = false;
-
   if (argc < 2) {
     cerr << "usage: judge [config.json [stdin]]" << endl;
     return -1;
@@ -182,16 +183,10 @@ int read_config(int argc, char** argv, json& j) {
   for (int i = 1; i < argc; i++) {
     json temp;
     if (strncmp(argv[i], "stdin", 5) == 0) {
-      if (!has_stdin) {
-        has_stdin = true;
-        try {
-          cin >> temp;
-        } catch (...) {
-          cerr << "failed to parse json from stdin" << endl;
-          return -1;
-        }
-      } else {
-        cerr << "could only have one stdin" << endl;
+      try {
+        cin >> temp;
+      } catch (...) {
+        cerr << "failed to parse json from stdin" << endl;
         return -1;
       }
     } else {
@@ -207,16 +202,28 @@ int read_config(int argc, char** argv, json& j) {
         return -1;
       }
     }
-    j.merge_patch(temp);
+    config.merge_patch(temp);
   }
 
-  if (j["debug"].is_boolean() && j["debug"]) {
+  if (config["debug"].is_boolean() && config["debug"]) {
     debug = true;
+    cout << "merged configuration:" << endl;
+    cout << setw(2) << config << endl;
   }
 
-  if (debug) {
-    cout << setw(2) << j << endl;
+
+  ifstream fin("./conf/lang_spec.json");
+
+  if (!fin.is_open()) {
+    cerr << "could not lang spec file" << endl;
+    return -1;
   }
+  try {
+    fin >> lang_spec;
+  } catch(...) {
+    cerr << "failed to parse lang spec file" << endl;
+  }
+
   return 0;
 }
 
@@ -343,17 +350,17 @@ int validate_config(json& j) {
     error = 1;
   }
 
-  if (j["max_core"].is_null()) {
+  if (j["max_thread"].is_null()) {
     if (debug)
       cout << "max core is null, default to 4" << endl;
-    j["max_core"] = 4;
-  } else if (!j["max_core"].is_number_integer()
-    || j["max_core"].get<int>() < 0) {
-    cerr << "max_core is not integer number" << endl;
+    j["max_thread"] = 4;
+  } else if (!j["max_thread"].is_number_integer()
+    || j["max_thread"].get<int>() < 0) {
+    cerr << "max_thread is not integer number" << endl;
     error = 1;
   }
 
-  max_core = j["max_core"].get<int>();
+  max_thread = j["max_thread"].get<int>();
 
   if (!j["test_case_count"].is_number_integer()
     || j["test_case_count"].get<int>() < -1) {
@@ -837,10 +844,10 @@ int trace_thread(int pid, THREAD_INFO* info) {
         cerr << "failed clone process" << endl;
         return -1;
       }
-      if (process_forked > max_core) {
+      if (process_forked > max_thread) {
         kill(pid, SIGKILL);
         kill(child_pid, SIGKILL);
-        if (result["extra"].is_null()) result["extra"] = string("using more than ") + to_string(max_core) + " cores";
+        if (result["extra"].is_null()) result["extra"] = string("using more than ") + to_string(max_thread) + " cores";
         cerr << "[" << pid << "] killed as forking too many children" << endl;
         return -1;
       }
@@ -1006,12 +1013,12 @@ bool should_continue(json &j, RESULT r)
         if (static_cast<int>(r) == element.get<int>())
           return true;
       } else {
-        cerr << "[warn] unknown continue rules" << endl;
+        cerr << "[warn] unknown continue_on rules" << endl;
       }
     }
     return false;
   }
-  cerr << "[warn] unknown continue rules" << endl;
+  cerr << "[warn] unknown continue_on rules" << endl;
   return true;
 }
 
@@ -1493,23 +1500,23 @@ int preprocess(json& j) {
 int main (int argc, char** argv) try {
   initialize(syscall_name);
 
-  json j;
-
-  if (read_config(argc, argv, j))
+  if (read_config(argc, argv, config))
     exit(255);
 
-  if (validate_config(j))
+  if (validate_config(config))
     exit(255);
 
-  preprocess(j);
+  preprocess(config);
 
   // compile source or check syntax, this function won't fail
-  generate_exec_args(j);
+  generate_exec_args(config);
 
   // do test
   mount("none", path["sandbox"].c_str(), "tmpfs", MS_NOATIME |  MS_NODEV | MS_NODIRATIME | MS_NOEXEC | MS_NOSUID, "");
-  do_test(j);
+  do_test(config);
+
   throw std::range_error("main function should no return");
+
 } catch (const nlohmann::json::exception& e) {
   result["extra"] = string("core caught json exception: ") + e.what();
   finish(SW);

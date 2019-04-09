@@ -43,13 +43,13 @@
   "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go, pypy3
   "pid": 1001, // [undefined]
   "max_time": 1000, // [1000]
-  "max_real_time": 2000, // [max_time + 1]
+  "max_real_time": 2000, // [max_time + 1000]
   "max_time_total": 30000, // [30000]
   "max_memory": 65530, // [65530]
   "max_output": 10000000,  // [10000000]
-  "max_core": 4, // [4] 注意: 多核心 go 默认使用 4 核心
-  "on_error_continue": ["accepted", "presentation error", "wrong answer"], // [["accepted", "presentation error"]]，也可以是 true 或 false
-  "test_case_count": 1, // <必填>
+  "max_thread": 4, // [4] 核心、线程、进程数， 多核心 go 默认使用 4 核心
+  "continue_on": ["accepted", "presentation error", "wrong answer"], // [["accepted", "presentation error"]]，也可以是 true 或 false
+  "test_case_count": 1, // [0]，0 指由 json 提供 stdin，其他读文件
   "spj_mode": "compare", // [no]，可以是 no, compare 或 interactive
   "path": {
     "base": null, // [/mnt/data]
