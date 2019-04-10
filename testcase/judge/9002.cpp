@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
 
   string r;
   getline(sandbox, r);
+  cout << "Got " << r << endl;
 
   if (r == "Hello world") return 0;
   return 2;

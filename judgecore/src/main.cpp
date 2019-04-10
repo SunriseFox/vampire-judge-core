@@ -918,9 +918,7 @@ RESULT do_compare(const map<string, string>& extra) {
     int pid = fork();
     if (pid == 0) {
       int fd = open(extra.at("log").c_str(), O_WRONLY | O_CREAT | O_TRUNC);
-      cout << "-----" << fd << endl;
-      if (dup2(fd, STDOUT_FILENO))
-        perror("dup stdout");
+      dup2(fd, STDOUT_FILENO);
       dup2(fd, STDERR_FILENO);
       alarm(10);
       execl (
@@ -1047,7 +1045,6 @@ RESULT do_compare(const map<string, string>& extra) {
       extra["output"] = path["output"] + "/" + cs + ".execout";
     }
     if (access(extra["stdin"].c_str(), R_OK)) {
-      cerr << extra["stdin"] << "failed at 4" << endl;
       extra["stdin"] = "/dev/null";
     }
     if (access(extra["stdout"].c_str(), R_OK)) extra["stdout"] = "/dev/null";
@@ -1197,7 +1194,7 @@ RESULT do_compare(const map<string, string>& extra) {
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
-      string log = readFile(extra.at("log"), 1000);
+      string log = readFile(extra.at("log"), 10240);
       if (log.size() == 0) {
         r["extra"] = nullptr;
       } else {
@@ -1323,8 +1320,10 @@ RESULT do_compare(const map<string, string>& extra) {
           rs = AC;
         } else {
           rs = do_compare(extra);
+          r["extra"] = readFile(extra.at("log"), 10240);
         }
       }
+
       if (spj_mode == SPJ_INLINE) {
         struct dirent *dir;
         struct stat sb;
