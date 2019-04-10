@@ -1,10 +1,11 @@
 {
   "sid": 10001,
   "filename": "main.cpp",
-  "lang": "custom",
+  "lang": "c++",
   "variant": {
     "compiler": "g++",
-    "cargs": ["-std=c++17", "-o", "$exec", "$code"],
-    "eargs": ["1"]
+    "cargs": null,
+    "eargs": ["$case"],
+    "cscript": null
   }
 }

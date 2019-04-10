@@ -80,13 +80,16 @@
     "ext": "cpp",
     // 编译器可执行文件，false(bool) 则强制跳过编译阶段
     "compiler": "g++",
-    // 编译器参数，期待数组、字符串（自动作为 argc[1]）
+    // 编译器参数，期待数组 (argc[1] - argc[n])、字符串 (argc[1])
+    // 此处额外可用 $customArgs，规则详见 default.json 中的规则
     "cargs": ["-DONLINE_JUDGE", "-pthread", "-O2", "-static", "-std=c++14", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
     // 预编译脚本，期待字符串，sh 格式（如果存在，设置 $script，需手动执行）
+    // 此处额外可用 $customArgs，规则详见 default.json 中的规则
     "cscript": [],
     // 可执行文件，期待字符串（直接执行），数组（拼接为 sh 格式的脚本），null（默认为 $exec）
     "executable": "$exec",
-    // 运行时参数，期待数组、字符串（自动作为 argc[1]）
+    // 运行时参数，期待数组 (argc[1] - argc[n])、字符串 (argc[1])
+    // 此处额外可用 $case，$customArgs
     "eargs": []
   }, {
     "id": 1,
@@ -105,19 +108,37 @@
 ]
 ```
 
-+ 默认配置文件内容如下：
++ 默认配置文件格式如下：
 
 ```json5
 {
   // 输出很多调试信息（真的很多）
   "debug": false,
-  // 任意字段，可被类似 $pid 的方式引用，如不引用可任意删除，如引用其他字段可自行添加
-  "pid": null,
+  // 任意一些字段，可被类似 $pid 的方式引用，如不引用可任意删除，如引用其他字段可自行添加
+  // 引用未定义的字段将会依样保留，并向 stderr 输出对应信息
+  "pid": 9001,
   "sid": null,
   "filename": null,
+  // 该项于运行时设置，代表正在测试的是第 i 组数据
+  // 因此此处的设置会被覆盖
+  "case": ["$", "case"],
   // 语言名或语言 ID
   "lang": "c",
-  // [可选] 编译器额外配置，只有当 lang_spec 中对应项为 null 时才可配置
+  // [可选] 编译器额外配置
+  // 当 lang_spec 中对应项为 null 时，取此处配置
+  // 当 lang_spec 中对应项为 false 时，跳过该项且此处不可设置
+  // 否则，此处不可设置
+  // 但，对于 cargs 和 cscript 和 eargs：
+  // 当 lang_spec 中存在 1 个 $customArgs 时，将该配置对应的<期待类型>插入至这一位置
+  // 当 lang_spec 中存在 n 个 $customArgs 时，将该配置数组对应第 i 个<期待类型>插入至这一位置
+  // 如果此处对应项不存在，则直接将 $customArgs 移除
+  // 例如，lang_spec 的 cargs 为 ["$customArgs", "-o", "$exec", "$code", "$customArgs"]
+  // 此处 cargs 为 [["-O2"], ["-Wall", "-Wextra"]] 时，拼接完毕为
+  // ["-O2", "-o", "<exec>", "<code>", "-Wall", "-Wextra"]
+  // 如果此处不是数组或它的第 i 项不是<期待类型>，则对应 $customArgs 将被直接移除
+  // 例如，lang_spec 的 cscript 为 ["$customArgs", ", ", "$customArgs"]
+  // 此处的 cscript 为 ["Hello", "$pid"]，则拼接完毕为
+  // "Hello, 9001"
   "variant": {
     // 字符串。
     "compiler": "gcc",
@@ -127,7 +148,7 @@
     "cscript": [],
     // 字符串
     "executable": "$exec",
-    // 数组
+    // 数组，额外设置 $case 为当前测试为第 i 组数据
     "eargs": []
   },
   "max_time": 1000, // 数字，毫秒

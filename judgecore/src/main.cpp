@@ -253,6 +253,10 @@ int read_config(int argc, char** argv) {
 }
 
 string merge_array(json& root, json& current, json& array, const string& delim = string(), int depth = 0) {
+  if (depth > 16) {
+    throw std::range_error("possible loop reference detected for " + array.dump());
+  }
+
   if (array.is_string()) {
     string str = array.get<string>();
     if (str.length() != 1 && str.front() == '$') {
@@ -260,8 +264,9 @@ string merge_array(json& root, json& current, json& array, const string& delim =
         array = str = merge_array(root, current, current[str.substr(1)], string(), depth + 1);
       else if (root.count(str.substr(1)))
         array = str = merge_array(root, current, root[str.substr(1)], string(), depth + 1);
-      else
-        cerr << "[warn] undefined reference " << str << endl;;
+      else {
+        cerr << "[warn] undefined reference " << str << endl;
+      }
     }
     return str;
   }
@@ -275,9 +280,6 @@ string merge_array(json& root, json& current, json& array, const string& delim =
 
   if (!array.is_array()) {
     throw std::range_error("converting unknown path");
-  }
-  if (depth > 16) {
-    throw std::range_error("possible loop reference detected");
   }
 
   stringstream ss;
@@ -504,28 +506,56 @@ int compile_general(std::vector<const char*> args) {
 }
 
 int generate_exec_args () {
+
   do {
     // generate compile script, then set $script to that file
     // we don't execute the script.
-    if (language["cscript"].is_boolean())
+    auto& wants = language["cscript"];
+
+    if (wants.is_boolean())
       break;
 
-    if (language["cscript"].is_null())
-      language["cscript"] = config["variant"]["cscript"];
-    if (language["cscript"].size() == 0)
+    if (wants.is_null() || (wants.is_string() && wants.get<string>() == "$customArgs"))
+      wants = config["variant"]["cscript"];
+
+    if (wants.size() == 0)
       break;
 
-    merge_array(config, config["path"], language["cscript"]);
+    if (wants.is_array()) {
+      int n = std::count_if(wants.begin(),wants.end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
+      int i = 0;
+      for (json::iterator el = wants.begin(); el != wants.end(); ) {
+        if (el->get<string>() == "$customArgs") {
+          wants.erase(el);
+          if (n > 1) {
+            if (!config["variant"]["cscript"].is_array() || config["variant"]["cscript"].size() < static_cast<json::size_type>(n)) {
+              continue;
+            }
+            wants.insert(el, config["variant"]["cscript"][i]);
+            i++;
+          } else {
+            if (config["variant"]["cscript"].empty()) {
+              continue;
+            }
+            wants.insert(el, config["variant"]["cscript"]);
+          }
+        }
+        merge_array(config, config["path"], *el);
+        ++el;
+      }
+    }
+
+    merge_array(config, config["path"], wants);
 
     if (debug) {
       cout << "compile sripts is:" << endl;
-      cout << language["cscript"].get<string>() << endl;
+      cout << wants.get<string>() << endl;
     }
 
     string filename = path["temp"] + ".cscript";
 
     ofstream fout(filename);
-    fout << language["cscript"].get<string>() << endl;
+    fout << wants.get<string>() << endl;
 
     if (!fout) {
       result["compiler"] = "write compile script failed";
@@ -534,6 +564,30 @@ int generate_exec_args () {
 
     config["path"]["script"] = filename;
   } while(false);
+
+  auto merge_custom_args = [](const string& c){
+    int n = std::count_if(language[c].begin(), language[c].end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
+    int i = 0;
+    for (json::iterator el = language[c].begin(); el != language[c].end(); ) {
+      if (el->get<string>() == "$customArgs") {
+        language[c].erase(el);
+        if (n > 1) {
+          if (!config["variant"][c][i].is_array()) {
+            continue;
+          }
+          language[c].insert(el, config["variant"][c][i].begin(), config["variant"][c][i].end());
+          i++;
+        } else {
+          if (!config["variant"][c].is_array()) {
+            continue;
+          }
+          language[c].insert(el, config["variant"][c].begin(), config["variant"][c].end());
+        }
+      }
+      merge_array(config, config["path"], *el);
+      ++el;
+    }
+  };
 
   do {
     if (language["compiler"].is_boolean())
@@ -556,15 +610,15 @@ int generate_exec_args () {
     if (!language["cargs"].is_array())
       language["cargs"] = json::array();
 
-    for (auto& el: language["cargs"])
-      merge_array(config, config["path"], el);
+    merge_custom_args("cargs");
 
     std::vector<const char*> args = {
       language["compiler"].get<string>().c_str()
     };
 
     for (auto& el: language["cargs"]) {
-      args.push_back(el.get<string>().c_str());
+      if (!el.empty())
+        args.push_back(el.get<string>().c_str());
     }
 
     if (compile_general(args)) {
@@ -602,6 +656,7 @@ int generate_exec_args () {
 
   if (language["eargs"].is_null())
     language["eargs"] = config["variant"]["eargs"];
+
   if (language["eargs"].is_string()) {
     string str = language["eargs"].get<string>();
     language["eargs"] = json::array();
@@ -610,6 +665,8 @@ int generate_exec_args () {
   if (!language["eargs"].is_array())
     language["eargs"] = json::array();
 
+  config["case"] = {"$", "case"};
+  merge_custom_args("eargs");
   return 0;
 }
 
@@ -999,16 +1056,17 @@ RESULT do_compare(const map<string, string>& extra) {
     cout << "exec is: " << path["exec"] << endl;
 
   for (int c = 1; c <= cases; c++) {
-    config["case"] = c;
+    string cs = to_string(c);
+
+    config["case"] = cs;
     json eargs = language["eargs"];
     vector<const char*> args = { path["exec"].c_str() };
     for (auto& el: eargs) {
       merge_array(config, config["path"], el);
-      args.push_back(el.get<string>().c_str());
+      if (!el.empty())
+        args.push_back(el.get<string>().c_str());
     }
     args.push_back(nullptr);
-
-    string cs = to_string(c);
 
     map<string, string> extra;
 
@@ -1052,8 +1110,8 @@ RESULT do_compare(const map<string, string>& extra) {
 
     if (debug) {
       cout << "test case " << cs << endl;
-      cout << "input: " << extra["stdin"] << endl;
       cout << "log: " << extra["log"] << endl;
+      cout << "args: " << eargs << endl;
     }
 
     if (spj_mode == SPJ_INTERACTIVE) {
