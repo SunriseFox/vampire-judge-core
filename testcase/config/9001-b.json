@@ -4,8 +4,8 @@
   "lang": "c++",
   "variant": {
     "compiler": "g++",
-    "cargs": null,
+    "cargs": ["-std=c++17"],
     "eargs": ["$case"],
-    "cscript": null
+    "cscript": ["Hello", "$pid"]
   }
 }

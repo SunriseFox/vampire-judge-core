@@ -565,23 +565,23 @@ int generate_exec_args () {
     config["path"]["script"] = filename;
   } while(false);
 
-  auto merge_custom_args = [](const string& c){
-    int n = std::count_if(language[c].begin(), language[c].end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
+  auto merge_custom_args = [](json& wants, const json& merge){
+    int n = std::count_if(wants.begin(), wants.end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
     int i = 0;
-    for (json::iterator el = language[c].begin(); el != language[c].end(); ) {
+    for (json::iterator el = wants.begin(); el != wants.end(); ) {
       if (el->get<string>() == "$customArgs") {
-        language[c].erase(el);
+        wants.erase(el);
         if (n > 1) {
-          if (!config["variant"][c][i].is_array()) {
+          if (!merge[i].is_array()) {
             continue;
           }
-          language[c].insert(el, config["variant"][c][i].begin(), config["variant"][c][i].end());
+          wants.insert(el, merge[i].begin(), merge[i].end());
           i++;
         } else {
-          if (!config["variant"][c].is_array()) {
+          if (!merge.is_array()) {
             continue;
           }
-          language[c].insert(el, config["variant"][c].begin(), config["variant"][c].end());
+          wants.insert(el, merge.begin(), merge.end());
         }
       }
       merge_array(config, config["path"], *el);
@@ -590,33 +590,38 @@ int generate_exec_args () {
   };
 
   do {
-    if (language["compiler"].is_boolean())
-      break;
+    {
+      auto& wants = language["compiler"];
 
-    if (language["compiler"].is_null())
-      language["compiler"] = config["variant"]["compiler"];
+      if (wants.is_boolean())
+        break;
 
-    merge_array(config, config["path"], language["compiler"]);
+      if (wants.is_null())
+        wants = config["variant"]["compiler"];
 
-    if (language["cargs"].is_null())
-      language["cargs"] = config["variant"]["cargs"];
-
-    if (language["cargs"].is_string()) {
-      string str = language["cargs"].get<string>();
-      language["cargs"] = json::array();
-      language["cargs"].push_back(str);
+      merge_array(config, config["path"], wants);
     }
 
-    if (!language["cargs"].is_array())
-      language["cargs"] = json::array();
+    auto& wants = language["cargs"];
+    if (wants.is_null())
+      wants = config["variant"]["cargs"];
 
-    merge_custom_args("cargs");
+    if (wants.is_string()) {
+      string str = wants.get<string>();
+      wants = json::array();
+      wants.push_back(str);
+    }
+
+    if (!wants.is_array())
+      wants = json::array();
+
+    merge_custom_args(wants, config["variant"]["cargs"]);
 
     std::vector<const char*> args = {
       language["compiler"].get<string>().c_str()
     };
 
-    for (auto& el: language["cargs"]) {
+    for (auto& el: wants) {
       if (!el.empty())
         args.push_back(el.get<string>().c_str());
     }
@@ -627,22 +632,23 @@ int generate_exec_args () {
   } while(false);
 
   do {
-    if (language["executable"].is_null())
-      language["executable"] = config["variant"]["executable"];
-    if (language["executable"].is_null())
-      language["executable"] = "$exec";
+    auto& wants = language["executable"];
+    if (wants.is_null())
+      wants = config["variant"]["executable"];
+    if (wants.is_null())
+      wants = "$exec";
 
-    if (language["executable"].is_array()) {
+    if (wants.is_array()) {
       // if executable is an array, we treat it as script and prepare the $exec
-      merge_array(config, config["path"], language["executable"]);
+      merge_array(config, config["path"], wants);
 
       if (debug) {
         cout << "executable sripts is:" << endl;
-        cout << language["executable"].get<string>() << endl;
+        cout << wants.get<string>() << endl;
       }
 
       ofstream fout(path["exec"]);
-      fout << language["executable"].get<string>() << endl;
+      fout << wants.get<string>() << endl;
 
       if (!fout) {
         result["compiler"] = "write executable script failed";
@@ -650,23 +656,26 @@ int generate_exec_args () {
       }
     } else {
       // if not an array, we still need to merge it
-      merge_array(config, config["path"], language["executable"]);
+      merge_array(config, config["path"], wants);
     }
   } while(false);
 
-  if (language["eargs"].is_null())
-    language["eargs"] = config["variant"]["eargs"];
+  {
+    auto& wants = language["eargs"];
+    if (wants.is_null())
+      wants = config["variant"]["eargs"];
 
-  if (language["eargs"].is_string()) {
-    string str = language["eargs"].get<string>();
-    language["eargs"] = json::array();
-    language["eargs"].push_back(str);
+    if (wants.is_string()) {
+      string str = wants.get<string>();
+      wants = json::array();
+      wants.push_back(str);
+    }
+    if (!wants.is_array())
+      wants = json::array();
+
+    config["case"] = {"$", "case"};
+    merge_custom_args(wants, config["variant"]["eargs"]);
   }
-  if (!language["eargs"].is_array())
-    language["eargs"] = json::array();
-
-  config["case"] = {"$", "case"};
-  merge_custom_args("eargs");
   return 0;
 }
 
