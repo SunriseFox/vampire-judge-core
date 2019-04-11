@@ -313,6 +313,32 @@ int validate_config() {
     }
   };
 
+  if (config["lang"].is_string()) {
+    string lang_name = config["lang"].get<string>();
+    for (auto& lang: lang_spec) {
+      if (lang["name"].is_string() &&lang["name"].get<string>() == lang_name) {
+        language = lang;
+        break;
+      }
+    }
+  } else if (config["lang"].is_number_integer()) {
+    int lang_id = config["lang"].get<int>();
+    for (auto& lang: lang_spec) {
+      if (lang["id"].is_number_integer() && lang["id"].get<int>() == lang_id) {
+        language = lang;
+        break;
+      }
+    }
+  }
+  if (language.is_null()) {
+    cerr << "unknown language" << config["lang"] << endl;
+    error = 1;
+  } else {
+    config["lang_name"] = language["name"];
+    config["lang_id"] = language["id"];
+    config["lang_ext"] = language["ext"];
+  }
+
   merge_path("base");
   merge_path("temp");
   merge_path("output");
@@ -367,29 +393,6 @@ int validate_config() {
     merge_path("spj");
   } else {
     config["path"]["spj"] = "";
-  }
-
-  if (config["lang"].is_string()) {
-    string lang_name = config["lang"].get<string>();
-    for (auto& lang: lang_spec) {
-      if (lang["name"] == lang_name) {
-        language = lang;
-        break;
-      }
-    }
-  } else if (config["lang"].is_number_integer()) {
-    int lang_id = config["lang"].get<int>();
-    for (auto& lang: lang_spec) {
-      if (lang["id"] == lang_id) {
-        language = lang;
-        break;
-      }
-    }
-  }
-
-  if (language.is_null()) {
-    cerr << "unknown language" << config["lang"] << endl;
-    error = 1;
   }
 
   if (debug)
@@ -1083,38 +1086,38 @@ RESULT do_compare(const map<string, string>& extra) {
       extra["stdin"] = path.at("temp") + "/inline-" + cs + ".in";
       extra["stdout"] = "/dev/null";
       extra["output"] = path.at("temp") + "/inline-" + cs + ".out";
-      if(config["inline"].is_array() && config["inline"].size() >= static_cast<json::size_type>(c)) {
-        auto& case_inline = config["inline"][c-1];
-        if (case_inline["stdin"].is_string()) {
-          ofstream fout(extra["stdin"]);
-          fout << case_inline["stdin"].get<string>();
-          if (!fout) {
-            extra["stdin"] = "/dev/null";
-          }
-        } else {
-          extra["stdin"] = "/dev/null";
-        }
-        if (case_inline["fs"].is_object()) {
-          for (const auto& el: case_inline["fs"].items()) {
-            string key = el.key();
-            key.erase(0, key.find_last_of('/') + 1);
-            if (key == "..") key = "[insecure filename]";
-            ofstream fout(path.at("sandbox") + "/" + key);
-            fout << el.value().get<string>();
-          }
-        }
-      } else {
-        extra["stdin"] = "/dev/null";
-      }
     } else {
       extra["stdin"] = path["stdin"] + "/" + cs + ".in";
       extra["stdout"] = path["stdout"] + "/" + cs + ".out";
       extra["output"] = path["output"] + "/" + cs + ".execout";
     }
-    if (access(extra["stdin"].c_str(), R_OK)) {
-      extra["stdin"] = "/dev/null";
+
+    if(config["inline"].is_array() && config["inline"].size() >= static_cast<json::size_type>(c)) {
+      auto& case_inline = config["inline"][c-1];
+      if (spj_mode == SPJ_INLINE && case_inline["stdin"].is_string()) {
+        ofstream fout(extra["stdin"]);
+        fout << case_inline["stdin"].get<string>();
+        if (!fout) {
+          extra["stdin"] = "/dev/null";
+        }
+      }
+      if (case_inline["fs"].is_object()) {
+        for (const auto& el: case_inline["fs"].items()) {
+          string key = el.key();
+          key.erase(0, key.find_last_of('/') + 1);
+          if (key == "..") key = "[insecure filename]";
+          ofstream fout(path.at("sandbox") + "/" + key);
+          fout << el.value().get<string>();
+        }
+      }
     }
-    if (access(extra["stdout"].c_str(), R_OK)) extra["stdout"] = "/dev/null";
+
+    if (access(extra["stdin"].c_str(), R_OK))
+      extra["stdin"] = "/dev/null";
+
+    if (access(extra["stdout"].c_str(), R_OK))
+      extra["stdout"] = "/dev/null";
+
     extra["log"] = path["log"] + "/" + cs + ".log";
 
     if (debug) {

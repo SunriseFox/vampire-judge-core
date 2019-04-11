@@ -21,5 +21,5 @@ testcase/judge/9003
 
 # magic files
 judgecore/conf/*.json
-!judgecore/conf/default.json
+!judgecore/conf/default.json.sample
 !judgecore/conf/lang_spec.json

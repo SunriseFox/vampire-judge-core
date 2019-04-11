@@ -84,5 +84,23 @@
     "cscript": null,
     "executable": null,
     "eargs": null
+  }, {
+    "id": 91,
+    "name": "custom_c",
+    "ext": "c",
+    "compiler": "g++",
+    "cargs": ["$customArgs", "-Wall", "-Wextra", "-o", "$exec", "$code"],
+    "cscript": [],
+    "executable": "$exec",
+    "eargs": ["$customArgs"]
+  }, {
+    "id": 92,
+    "name": "custom_c++",
+    "ext": "cpp",
+    "compiler": "g++",
+    "cargs": ["$customArgs", "-Wall", "-Wextra", "-o", "$exec", "$code"],
+    "cscript": [],
+    "executable": "$exec",
+    "eargs": ["$customArgs"]
   }
 ]

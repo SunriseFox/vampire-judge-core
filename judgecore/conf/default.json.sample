@@ -2,15 +2,8 @@
   "debug": false,
   "pid": null,
   "sid": null,
-  "filename": null,
+  "filename": ["main.", "$lang_ext"],
   "lang": "c",
-  "variant": {
-    "compiler": "gcc",
-    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
-    "cscript": [],
-    "executable": "$exec",
-    "eargs": []
-  },
   "max_time": 1000,
   "max_real_time": 2000,
   "max_time_total": 30000,

@@ -18,15 +18,21 @@
 
 + 如果允许用户自定义编译器和编译指令，请务必小心，编译器仅在部分监视的情况下运行
 
-### Build
+### 构建
 
-+ (Linux) 打开 build.sh，修改 `MOUNTFOLDER` 为本地一个已存在的目录
++ 将 `./judgecore/default.json.sample`，复制到 `./judgecore/default.json`，修改其中需要的值
++ (Linux) 打开 build.sh，修改 `MOUNTFOLDER` 为本地一个已存在的目录，`MOUNTPOINT` 与 `$base` 一致即可，一般不需修改
 + (Windows) 打开 build.bat，修改 `MOUNTFOLDER` 为本地一个已存在的目录
 + 运行对应的 `build.sh` 或 `build.bat`
 
 ### 测试
 
 + 项目在 testcase 中提供了测试样例，只需要运行当前目录的 `./test.sh` 或 `test.bat` 即可。
+
+### 更新
+
++ 如果只需更新内核或配置文件，运行 `./update.sh` 或者 `./update.bat`
++ 如果需要更新 Docker，`docker rm -f judgecore` 后重新构建
 
 ### Usage
 
@@ -43,7 +49,7 @@
 
 + 拼接示例
 
-  ```json
+  ```json5
   {
     "pid": 1001,
     "variant": {
@@ -100,9 +106,17 @@
     "cscript": null,
     "executable": "/usr/bin/v8/d8",
     "eargs": "$code",
+    // 语言资源限制额外设置，即：
+    // 对应项，直接替换 config 中的限制
+    // 对应项+，额外增加限制
+    // 对应项*，额外乘上限制
     "patch": {
-      "max_memory": 524288,
-      "max_time+": 1000
+      // 2 倍限制内存
+      "max_memory*": 2,
+      // 额外 1 秒执行时间
+      "max_time+": 1000,
+      // 最多 2 线程
+      "max_thread": 2
     }
   }
 ]
@@ -118,12 +132,16 @@
   // 引用未定义的字段将会依样保留，并向 stderr 输出对应信息
   "pid": 9001,
   "sid": null,
-  "filename": null,
+  "filename": ["main.", "$lang_ext"],
   // 该项于运行时设置，代表正在测试的是第 i 组数据
-  // 因此此处的设置会被覆盖
+  // 此处的设置会被覆盖
   "case": ["$", "case"],
   // 语言名或语言 ID
   "lang": "c",
+  // 下面三项运行时根据 lang_spec 自动设置
+  "lang_id": null,
+  "lang_name": null,
+  "lang_ext": null,
   // [可选] 编译器额外配置
   // 当 lang_spec 中对应项为 null 时，取此处配置
   // 当 lang_spec 中对应项为 false 时，跳过该项且此处不可设置
@@ -135,10 +153,10 @@
   // 例如，lang_spec 的 cargs 为 ["$customArgs", "-o", "$exec", "$code", "$customArgs"]
   // 此处 cargs 为 [["-O2"], ["-Wall", "-Wextra"]] 时，拼接完毕为
   // ["-O2", "-o", "<exec>", "<code>", "-Wall", "-Wextra"]
-  // 如果此处不是数组或它的第 i 项不是<期待类型>，则对应 $customArgs 将被直接移除
   // 例如，lang_spec 的 cscript 为 ["$customArgs", ", ", "$customArgs"]
   // 此处的 cscript 为 ["Hello", "$pid"]，则拼接完毕为
   // "Hello, 9001"
+  // 如果此处不是数组或它的第 i 项不是<期待类型>，则对应 $customArgs 将被直接移除
   "variant": {
     // 字符串。
     "compiler": "gcc",
@@ -155,7 +173,7 @@
   "max_real_time": 2000, // 数字，毫秒
   "max_time_total": 30000, // 数字，毫秒
   "max_memory": 65530, // 数字，千字节
-  "max_output": 10000000, // 数字字节
+  "max_output": 10000000, // 数字，字节
   "max_thread": 4, // 数字，核心/线程/进程数
   "continue_on": ["accepted", "presentation error"], // 枚举数组或布尔
   "test_case_count": 1, // 数字，自动取 $stdin 中的 1~c 的 .in 文件作为标准输入，0 不测
@@ -172,8 +190,9 @@
     "exec": ["$temp", "main"],
     "spj": ["$base", "judge", "$pid"]
   },
-  // [可选, 数组] 如果 spj 模式是 inline，这里是每组数据的标准输入和文件
-  // 文件名不能含有 /。该文件对用户程序只读。
+  // [可选, 数组] 这里可以提供每组数据的输入文件
+  // 如果 spj 模式是 inline，可额外提供标准输入
+  // 文件名不能含有 /，置于用户程序工作目录且对用户程序只读。
   "inline": [{
     "stdin": "1 2\n",
     "fs": {
@@ -245,7 +264,7 @@ argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的�
           "hi.txt": "Hello world!"
         }
       },
-      // 当 spj 为 interactive 时，为特殊评测程序的输出
+      // 当 spj 为 compare/interactive 时，为特殊评测程序的输出
       // 否则可能为内核输出的备注信息
       "extra": "ok",
     }
