@@ -13,14 +13,16 @@
 
 #include <sys/types.h> // waitpid, kill
 #include <sys/wait.h>
+#include <linux/limits.h> // PATH_MAX
 
 using namespace std;
 
+string random_string(size_t length);
 int create_folder(const string& path);
 int remove_folder(const string& path);
 int copy_file(const string& from, const string& dest);
 string readFile(const string& filename);
 string readFile(const string& filename, std::string::size_type count);
-string random_string(size_t length);
+string getexepath();
 
 #endif // UTILS_H

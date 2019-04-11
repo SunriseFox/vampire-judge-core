@@ -1451,7 +1451,6 @@ RESULT do_compare(const map<string, string>& extra) {
               if (sb.st_uid == 99 && sb.st_gid == 99) {
                 string content = readFile(filename, sys.max_inline_fs_size);
                 r["inline"]["fs"][dir->d_name] = content;
-                cout << count << " " << sys.max_inline_fs_count << endl;
                 if (++count > sys.max_inline_fs_count) break;
               }
             }

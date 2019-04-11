@@ -82,3 +82,10 @@ string readFile(const string& filename, std::string::size_type count)
   result.resize(stream.gcount());
   return result;
 }
+
+string getexepath()
+{
+  char result[ PATH_MAX ];
+  ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX );
+  return std::string( result, (count > 0) ? count : 0 );
+}
