@@ -190,6 +190,11 @@
     "exec": ["$temp", "main"],
     "spj": ["$base", "judge", "$pid"]
   },
+  // 在编译 spj 过程中，路径只有 $base 和 $spj 可以被引用
+  "spj": {
+    "code": ["$spj", ".", "$lang_ext"],
+    "target": "$spj"
+  },
   // [可选, 数组] 这里可以提供每组数据的输入文件
   // 如果 spj 模式是 inline，可额外提供标准输入
   // 文件名不能含有 /，置于用户程序工作目录且对用户程序只读。
@@ -203,20 +208,30 @@
 
 ```
 
-+ 一个完整的编译 spj 的配置文件：
-+ 编译的结果在 STDOUT
++ spj 编译逻辑与上述相同，但使用 spj 中的 code 和 target
++ 编译的结果在 STDOUT，如果编译成功，返回 0，否则返回 1
 
 ```json5
-
 {
-  "debug": true, // [false]
-  "base_path": "/mnt/data/", // [/mnt/data]
-  "pid": 1001, // [undefined]
-  "lang": "c++", // <必填>，可以是 c, c++, javascript, python, go
-  "code": "/mnt/data/judge/1001.cpp", // [<base_path>/judge/<pid>.<ext>]
-  "target": "/mnt/data/judge/1001"  // [<base_path>/judge/<pid>]
+  "debug": true,
+  "lang": "c++",
+  // default.json 的 spj 可引用此处值
+  "pid": 9002,
+  // 可选，覆盖默认设置
+  "code": null,
+  // 可选，覆盖默认设置
+  "target": null
 }
+```
 
++ 编译输出
+
+```json5
+{
+  "compiler": "",
+  "success": true,
+  "target": "/mnt/data/judge/9003"
+}
 ```
 
 + Special Judge 调用参数：
@@ -224,18 +239,18 @@
 ```
 如果是 compare，将在用户程序执行结束后运行，参数为
 < = /dev/null
-argv[1] = 该组数据的 stdin
-argv[2] = 该组数据的 stdout
-argv[3] = 用户程序输出的 execout
-argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的文件夹
-> = <log>
+argv[1] = 输入，该组数据的 stdin
+argv[2] = 输入，该组数据的 stdout
+argv[3] = 输入，用户程序输出的 execout
+argv[4] = 输入，如果用户程序写了文件，存放用户程序写入的文件的文件夹
+> = 输出，写入结果 json 的 detail[i]:extra
 
 如果是 interactive，将稍早于用户程序运行，参数为
 < = 用户程序的 stdout
-argv[1] = 该组数据的 stdin
-argv[2] = 该组数据的 stdout
-argv[3] = 如果为评测提供额外信息，写入到这个文件
-argv[4] = 如果用户程序写了文件，存放用户程序写入的文件的文件夹
+argv[1] = 输入，该组数据的 stdin
+argv[2] = 输入，该组数据的 stdout
+argv[3] = 输出，写入结果 json 的 detail[i]:extra
+argv[4] = 输入，如果用户程序写了文件，存放用户程序写入的文件的文件夹
 > = 用户程序的 stdin
 
 

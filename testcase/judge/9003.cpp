@@ -8,6 +8,7 @@ using namespace std;
 int main(int argc, char** argv) {
   if (argc != 5) {
     cerr << "command line args is not right" << endl;
+    throw std::range_error("command line args is not right");
   }
 
   std::random_device device;

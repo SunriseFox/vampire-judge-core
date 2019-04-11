@@ -355,11 +355,6 @@ int validate_config() {
     }
   };
 
-  if (!config["lang"].is_string() && !config["lang"].is_number_integer()) {
-    cerr << "lang is not valid" << endl;
-    error = 1;
-  }
-
   expect_int("max_time");
   if(!config.count("max_real_time"))
     config["max_real_time"] = config["max_time"].get<int>() + 1000;
@@ -572,7 +567,7 @@ int generate_exec_args () {
     int n = std::count_if(wants.begin(), wants.end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
     int i = 0;
     for (json::iterator el = wants.begin(); el != wants.end(); ) {
-      if (el->get<string>() == "$customArgs") {
+      if (el->is_string() && el->get<string>() == "$customArgs") {
         wants.erase(el);
         if (n > 1) {
           if (!merge[i].is_array()) {

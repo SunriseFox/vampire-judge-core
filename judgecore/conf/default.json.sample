@@ -23,5 +23,9 @@
     "temp": ["/tmp", ["judge-", "$pid", "-", "$sid"]],
     "exec": ["$temp", "main"],
     "spj": ["$base", "judge", "$pid"]
+  },
+  "spj": {
+    "code": ["$spj", ".", "$lang_ext"],
+    "target": "$spj"
   }
 }
