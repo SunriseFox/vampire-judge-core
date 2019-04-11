@@ -168,8 +168,7 @@ string getStatusText(RESULT what) {
 
   auto result_str = result.dump(debug ? 2 : -1, ' ', false, json::error_handler_t::replace);
   of << result_str << endl;
-  if (debug)
-    cout << result_str << endl;
+  cout << result_str << endl;
 
   _exit(0);
   throw std::range_error("finish function should not return");
@@ -546,8 +545,8 @@ int generate_exec_args () {
     merge_array(config, config["path"], wants);
 
     if (debug) {
-      cout << "compile sripts is:" << endl;
-      cout << wants.get<string>() << endl;
+      cerr << "compile sripts is:" << endl;
+      cerr << wants.get<string>() << endl;
     }
 
     string filename = path["temp"] + ".cscript";
@@ -641,8 +640,8 @@ int generate_exec_args () {
       merge_array(config, config["path"], wants);
 
       if (debug) {
-        cout << "executable sripts is:" << endl;
-        cout << wants.get<string>() << endl;
+        cerr << "executable sripts is:" << endl;
+        cerr << wants.get<string>() << endl;
       }
 
       ofstream fout(path["exec"]);
@@ -826,7 +825,7 @@ int trace_thread(int pid, THREAD_INFO* info) {
     {
       kill(pid, SIGKILL);
       if (debug)
-        cout << "[" << pid << "] user program terminated by system signal " << WTERMSIG(status) << endl;
+        cerr << "[" << pid << "] user program terminated by system signal " << WTERMSIG(status) << endl;
       return 0;
     }
 
