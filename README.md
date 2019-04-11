@@ -203,7 +203,37 @@
     "fs": {
       "hello.txt": "Hello world!\n"
     }
-  }]
+  }],
+  // compiler 和 sys 只是为了从内核中移除一些魔法数字
+  // 如果所有配置中它们都不存在，则取此处的值
+  // 所有数值为 0 ~ LONG_MAX
+  "compiler": {
+    // 最长编译时间 ms，防止 #include </dev/urandom>
+    "max_time": 12000,
+    // 最长编译真实时间 ms
+    "max_real_time": 20000,
+    // 最大编译内存 kB，防止 struct x(x(x(x(x
+    "max_memory": 204800,
+    // 最大输出 bytes，防止编译炸弹
+    "max_output": 52428800
+  },
+  "sys": {
+    // true 也统计系统调用用时，false 只统计用户代码时间
+    "time_system_time": false,
+    // 结果 json 中出现在 compiler 字段的最多字节数
+    // 防止 struct x(x(x(x(x 生成巨大编译错误文件
+    "max_compiler_size": 5000,
+    // 结果 json 中出现在 extra 字段的最多字节数
+    "max_extra_size": 10240,
+    // 用户程序所能写入的文件数目，0 不可写文件
+    "max_fs_write_count": 20,
+    // 模式为 inline 时，结果 json 中 fs 数组的最大长度
+    "max_inline_fs_count": 20,
+    // 模式为 inline 时，结果 json 中 fs 每项的最多字节数
+    "max_inline_fs_size": 1000,
+    // 模式为 inline 时，结果 json 中 stdout 的最多字节数
+    "max_inline_stdout_size": 1000
+  }
 }
 
 ```

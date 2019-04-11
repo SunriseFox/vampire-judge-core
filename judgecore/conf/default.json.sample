@@ -27,5 +27,20 @@
   "spj": {
     "code": ["$spj", ".", "$lang_ext"],
     "target": "$spj"
+  },
+  "compiler": {
+    "max_time": 12000,
+    "max_real_time": 20000,
+    "max_memory": 204800,
+    "max_output": 52428800
+  },
+  "sys": {
+    "time_system_time": false,
+    "max_compiler_size": 5000,
+    "max_extra_size": 10240,
+    "max_fs_write_count": 20,
+    "max_inline_fs_count": 20,
+    "max_inline_fs_size": 1000,
+    "max_inline_stdout_size": 1000
   }
 }

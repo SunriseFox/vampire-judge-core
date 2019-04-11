@@ -23,6 +23,11 @@
 
 using namespace std;
 
+extern bool debug;
+extern map<string, string> path;
+extern CONFIG_SYS sys;
+extern int fs_write;
+
 enum OP {
   GREATER, EQUAL, LESS, TEST, MASK, SET,
   STARTSWITH, ENDSWITH, CONTAINS, EXACT,
@@ -253,9 +258,6 @@ int check(int pid, int where, int op, ...) {
   return ret;
 }
 
-extern bool debug;
-extern map<string, string> path;
-
 int validate_syscall (int pid, int syscall) {
   // 0 1 2 3
   //safe, get, write, dangerous
@@ -283,6 +285,7 @@ int validate_syscall (int pid, int syscall) {
         check(pid, 1, REPLACE, buf);
         if (debug)
           cout << "[" << pid << "] " << buf << " - RW" << endl;
+        if(++fs_write > sys.max_fs_write_count) return SKIP;
         return ALLOW;
       } else {
         if (debug)
@@ -1324,6 +1327,7 @@ int validate_syscall (int pid, int syscall) {
         check(pid, 2, REPLACE, buf);
         if (debug)
           cout << "[" << pid << "] " << buf << " - RW" << endl;
+        if(++fs_write > sys.max_fs_write_count) return SKIP;
         return ALLOW;
       } else {
         if (debug)

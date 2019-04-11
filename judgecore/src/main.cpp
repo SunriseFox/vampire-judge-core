@@ -44,6 +44,11 @@ using json = nlohmann::json;
 
 using namespace std;
 
+// syscall.c need it to debug
+bool debug = false;
+// syscall.c need it to get path["sandbox"]
+map<string, string> path;
+
 struct THREAD_INFO {
   int pid;
   rusage usage;
@@ -57,25 +62,42 @@ struct THREAD_INFO {
   }
 };
 
-int pid_to_kill = -1;
-int lpipe[2], rpipe[2];
-mode_t code_permission;
+static struct CONFIG_COMPILER compiler {
+  .max_time = 120000,
+  .max_real_time = 200000,
+  .max_memory = 204800,
+  .max_output = 52428800,
+};
 
-bool debug = false;
-SPJ_MODE spj_mode = SPJ_NO;
+// syscall.c need it to get max_fs_write_count
+struct CONFIG_SYS sys {
+  .time_system_time = false,
+  .max_compiler_size = 5000,
+  .max_extra_size = 10240,
+  .max_fs_write_count = 20,
+  .max_inline_fs_count = 20,
+  .max_inline_fs_size = 1000,
+  .max_inline_stdout_size = 1000,
+};
+int fs_write = 0;
 
-map<string, string> path;
-map <int, string> syscall_name;
+static int pid_to_kill = -1;
+static int lpipe[2], rpipe[2];
+static mode_t code_permission;
 
-std::mutex g_tail_mutex;
-THREAD_INFO *tail = nullptr, *info = nullptr;
-int process_forked = 0;
-int max_thread = 4;
+static SPJ_MODE spj_mode = SPJ_NO;
 
-json result;
-json config;
-json lang_spec; // convert to null if found
-json language;
+static map <int, string> syscall_name;
+
+static mutex g_tail_mutex;
+static THREAD_INFO *tail = nullptr, *info = nullptr;
+static int process_forked = 0;
+static int max_thread = 4;
+
+static json result;
+static json config;
+static json lang_spec; // convert to null if found
+static json language;
 
 
 void close_pipe()
@@ -107,7 +129,8 @@ void kill_timeout (int) {
     if (pid_to_kill > 0) {
       kill(pid_to_kill, SIGKILL);
       killed = true;
-      cerr << "killed " << pid_to_kill << " - real time limit exceed" << endl;
+      if (debug)
+        cerr << "killed " << pid_to_kill << " - real time limit exceeded" << endl;
     }
     if (head) {
       pid_to_kill = head->pid;
@@ -368,6 +391,24 @@ int validate_config() {
 
   max_thread = config["max_thread"].get<int>();
 
+  auto set_if_long = [](const json& which, long& set) -> void {
+    if (which.is_number_integer() && which.get<long>() >= 0)
+      which.get_to(set);
+  };
+
+  set_if_long(config["compiler"]["max_time"], compiler.max_time);
+  set_if_long(config["compiler"]["max_real_time"], compiler.max_real_time);
+  set_if_long(config["compiler"]["max_memory"], compiler.max_memory);
+  set_if_long(config["compiler"]["max_output"], compiler.max_output);
+  set_if_long(config["sys"]["max_compiler_size"], sys.max_compiler_size);
+  set_if_long(config["sys"]["max_extra_size"], sys.max_extra_size);
+  set_if_long(config["sys"]["max_fs_write_count"], sys.max_fs_write_count);
+  set_if_long(config["sys"]["max_inline_fs_count"], sys.max_inline_fs_count);
+  set_if_long(config["sys"]["max_inline_fs_size"], sys.max_inline_fs_size);
+  set_if_long(config["sys"]["max_inline_stdout_size"], sys.max_inline_stdout_size);
+  if (config["sys"]["time_system_time"].is_boolean())
+    config["sys"]["time_system_time"].get_to(sys.time_system_time);
+
   if (config["spj_mode"].is_string()) {
     string str = config["spj_mode"].get<string>();
     if (str == "compare")
@@ -424,7 +465,9 @@ int set_resource_limit(const int& time_limit, const int& memory_limit, const int
   }
 
   rlimits.rlim_cur = output_limit;
-  rlimits.rlim_max = output_limit * 2;
+  if (__builtin_mul_overflow(output_limit, 2l, &rlimits.rlim_max)) {
+    rlimits.rlim_max = LONG_MAX;
+  }
   if ((r = setrlimit(RLIMIT_FSIZE, &rlimits))) {
     cerr << "set output limit failed, " << r << endl;
     _exit(255);
@@ -454,7 +497,7 @@ int compile_general(std::vector<const char*> args) {
     int fd = open(path.at("cmpinfo").c_str(), O_WRONLY);
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
-    set_resource_limit(7000, 204800, 52428800);
+    set_resource_limit(compiler.max_time, compiler.max_memory, compiler.max_output);
     if (setpgid(0, 0)) {
       cerr << "set pgid failed!" << endl;
     };
@@ -471,7 +514,7 @@ int compile_general(std::vector<const char*> args) {
     raise(SIGSYS);
   }
 
-  int compile_timeout = 12;
+  int compile_timeout = compiler.max_real_time / 1000 + 1;
   alarm(compile_timeout);
   pid_to_kill = pid;
   signal(SIGALRM, [](int) {
@@ -486,7 +529,7 @@ int compile_general(std::vector<const char*> args) {
   if (debug)
     cout << "compile time is " << sec << " seconds" << endl;
 
-  string compile_info = readFile(path["cmpinfo"], 5000);
+  string compile_info = readFile(path["cmpinfo"], sys.max_compiler_size);
   if(!WIFEXITED(status)) {
     compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
     status = WTERMSIG(status);
@@ -792,14 +835,13 @@ int trace_thread(int pid, THREAD_INFO* info) {
         cerr << "failed clone process" << endl;
         return -1;
       }
-      if (process_forked > max_thread) {
+      if (++process_forked > max_thread) {
         kill(pid, SIGKILL);
         kill(child_pid, SIGKILL);
         if (result["extra"].is_null()) result["extra"] = string("using more than ") + to_string(max_thread) + " cores";
         cerr << "[" << pid << "] killed as forking too many children" << endl;
         return -1;
       }
-      process_forked++;
       ptrace(PTRACE_CONT, pid, 0, 0);
 
       kill(child_pid, SIGSTOP);
@@ -855,13 +897,17 @@ int trace_thread(int pid, THREAD_INFO* info) {
           ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
           ptrace(PTRACE_KILL, pid, reinterpret_cast<char *>(1), SIGSYS);
           kill(pid, SIGSYS);
-          cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
+          if (debug)
+            cerr << "[" << pid << "] syscall " << orig_eax <<" denied by validator" << endl;
         } else if (res == SKIP) {
           ptrace(PTRACE_POKEUSER, pid, sizeof(long) * ORIG_RAX, (-1));
-          cerr << "[" << pid << "] syscall " << orig_eax <<" skipped by validator" << endl;
+          if (debug)
+            cerr << "[" << pid << "] syscall " << orig_eax <<" skipped by validator" << endl;
         } else if (res == KILL) {
           kill(pid, SIGKILL);
-          cerr << "[" << pid << "] syscall " << orig_eax <<" killed by validator" << endl;
+          if (debug)
+            cerr << "[" << pid << "] syscall " << orig_eax <<" killed by validator" << endl;
+          continue;
         }
       }
 
@@ -897,8 +943,6 @@ struct JUDGE_RESULT {
 };
 
 int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
-  process_forked = 0;
-
   info = tail = new THREAD_INFO;
   int status;
 
@@ -923,6 +967,8 @@ int load_seccomp_tracer(int pid, JUDGE_RESULT& result) {
 
   while(info) {
     int time = (int) (info->usage.ru_utime.tv_sec * 1000 + info->usage.ru_utime.tv_usec / 1000);
+    if (sys.time_system_time)
+      time += (int) (info->usage.ru_stime.tv_sec * 1000 + info->usage.ru_stime.tv_usec / 1000);
     result.time = max(result.time, time);
     result.memory += info->usage.ru_maxrss;
     if (debug) {
@@ -1063,6 +1109,8 @@ RESULT do_compare(const map<string, string>& extra) {
 
   for (int c = 1; c <= cases; c++) {
     string cs = to_string(c);
+    process_forked = 0;
+    fs_write = 0;
 
     config["case"] = cs;
     json eargs = language["eargs"];
@@ -1258,7 +1306,7 @@ RESULT do_compare(const map<string, string>& extra) {
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
-      string log = readFile(extra.at("log"), 10240);
+      string log = readFile(extra.at("log"), sys.max_extra_size);
       if (log.size() == 0) {
         r["extra"] = nullptr;
       } else {
@@ -1384,7 +1432,7 @@ RESULT do_compare(const map<string, string>& extra) {
           rs = AC;
         } else {
           rs = do_compare(extra);
-          r["extra"] = readFile(extra.at("log"), 10240);
+          r["extra"] = readFile(extra.at("log"), sys.max_extra_size);
         }
       }
 
@@ -1395,13 +1443,16 @@ RESULT do_compare(const map<string, string>& extra) {
         DIR *d = opendir(path.at("sandbox").c_str());
         if (d) {
           r["inline"]["fs"] = json::object();
+          int count = 0;
           while ((dir = readdir(d)) != NULL) {
           string filename = path.at("sandbox") + "/" + dir->d_name;
             if (dir->d_type == DT_REG) {
               stat(filename.c_str(), &sb);
               if (sb.st_uid == 99 && sb.st_gid == 99) {
-                string content = readFile(filename, 1000);
+                string content = readFile(filename, sys.max_inline_fs_size);
                 r["inline"]["fs"][dir->d_name] = content;
+                cout << count << " " << sys.max_inline_fs_count << endl;
+                if (++count > sys.max_inline_fs_count) break;
               }
             }
             unlink(filename.c_str());
@@ -1410,7 +1461,7 @@ RESULT do_compare(const map<string, string>& extra) {
         }
         if (r["inline"]["fs"].size() == 0)
           r["inline"].erase("fs");
-        r["inline"]["stdout"] = readFile(extra.at("output"), 1000);
+        r["inline"]["stdout"] = readFile(extra.at("output"), sys.max_inline_stdout_size);
       }
       r["status"] = static_cast<int>(rs);
       r["result"] = getStatusText(rs);
