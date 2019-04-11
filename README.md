@@ -43,7 +43,7 @@
 
 需要至少 3 个配置文件才能运行：
 
-+ 一个可接受的 **默认配置文件** （位于 ./judgecore/conf/default.json，[参考](https://github.com/SunriseFox/vampire-judge-core/blob/master/judgecore/conf/default.json)）
++ 一个可接受的 **默认配置文件** （位于 ./judgecore/conf/default.json，[参考](https://github.com/SunriseFox/vampire-judge-core/blob/master/judgecore/conf/default.json.sample)）
 + 一个可接受的 **语言配置文件** （位于 ./judgecore/conf/lang_spec.json，[参考](https://github.com/SunriseFox/vampire-judge-core/blob/master/judgecore/conf/lang_spec.json)）
 + 至少一个运行时配置文件
 
