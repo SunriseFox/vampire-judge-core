@@ -612,23 +612,20 @@ int generate_exec_args () {
     config["path"]["script"] = filename;
   } while(false);
 
-  auto merge_custom_args = [](json& wants, const json& merge){
+  auto merge_custom_args = [](json& wants, json& merge){
     int n = std::count_if(wants.begin(), wants.end(), [](const json& j){ return j.is_string() && j.get<string>() == "$customArgs";});
     int i = 0;
     for (json::iterator el = wants.begin(); el != wants.end(); ) {
       if (el->is_string() && el->get<string>() == "$customArgs") {
         wants.erase(el);
-        if (n > 1) {
-          if (!merge[i].is_array()) {
-            continue;
-          }
+        if (n > 1 && merge[i].is_array()) {
           wants.insert(el, merge[i].begin(), merge[i].end());
+          el = wants.begin();
           i++;
-        } else {
-          if (!merge.is_array()) {
-            continue;
-          }
+        } else if(n == 1 && merge.is_array()) {
           wants.insert(el, merge.begin(), merge.end());
+          el = wants.begin();
+          merge.clear();
         }
       }
       merge_array(config, config["path"], *el);
