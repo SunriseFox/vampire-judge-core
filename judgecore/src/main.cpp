@@ -33,9 +33,9 @@
 #include <linux/seccomp.h>
 #include <sys/prctl.h>
 
-#include "includes/defs.h"
-#include "includes/utils.h"
-#include "includes/syscall.h"
+#include "defs.h"
+#include "utils.h"
+#include "syscall.h"
 
 #include "json.hpp"
 using json = nlohmann::json;

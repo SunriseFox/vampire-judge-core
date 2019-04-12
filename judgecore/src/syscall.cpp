@@ -1,4 +1,4 @@
-#include "./syscall.h"
+#include "syscall.h"
 
 #include <stddef.h>
 #include <sys/ptrace.h>

@@ -49,7 +49,6 @@ THREAD_INFO* tail = nullptr;
 int trace_thread(int pid, THREAD_INFO* info) {
   cout << "[" << pid << "] prepare tracing" << endl;
   int orig_eax, eax, r;
-  long last_rip = 0;
   int& status = info->status;
   rusage& usage = info->usage;
 
@@ -246,7 +245,8 @@ int main(int argc, char** argv) {
     set_tracee();
     // kill(getpid(), SIGSTOP);
     freopen("/dev/null", "w", stdout);
-    return execvp(argv[1], argv + 1);
+    if (argc > 1)
+      return execvp(argv[1], argv + 1);
   } else {
     start_trace(pid);
     return 0;

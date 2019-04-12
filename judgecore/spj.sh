@@ -1,2 +1,2 @@
 #!/bin/bash
-exec ./compiler conf/spj.json
+./compiler conf/spj.json

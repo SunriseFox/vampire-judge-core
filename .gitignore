@@ -2,10 +2,9 @@
 
 # binary
 
+judgecore/obj
 judgecore/compiler
 judgecore/judgecore
-judgecore/tracee
-judgecore/tracer
 
 # profile-case binary
 
