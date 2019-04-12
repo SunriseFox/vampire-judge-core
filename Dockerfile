@@ -44,8 +44,7 @@ ENV PATH=/opt/rh/devtoolset-8/root/usr/bin:/opt/rh/rh-python36/root/usr/bin:$PAT
 
 WORKDIR /usr/bin/judgecore
 ADD judgecore /usr/bin/judgecore
-RUN set -ex; \
-    source /usr/bin/judgecore/compile.sh;
+RUN bash -c "/usr/bin/judgecore/compile.sh"
 
 # volume
 
