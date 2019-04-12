@@ -190,7 +190,9 @@ string getStatusText(RESULT what) {
   ofstream of(path["result"]);
 
   auto result_str = result.dump(debug ? 2 : -1, ' ', false, json::error_handler_t::replace);
-  of << result_str << endl;
+  if (spj_mode != SPJ_INLINE) {
+    of << result_str << endl;
+  }
   cout << result_str << endl;
 
   _exit(0);

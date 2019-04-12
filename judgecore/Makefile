@@ -21,6 +21,7 @@ $(ODIR)/%.o: src/%.cpp $(DEPS) |$(ODIR)/
 
 .PHONY: clean all
 
+# ||: for always success
 clean:
 	rm -Iv $(ODIR)/*.o compiler judgecore ||:
 
