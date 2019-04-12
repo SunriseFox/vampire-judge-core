@@ -204,11 +204,13 @@ int read_config(int argc, char** argv) {
   }
 
   {
-    ifstream fin("./conf/default.json");
-
+    ifstream fin(getexecpath() + DEFAULT_JSON_PATH);
     if (!fin.is_open()) {
-      cerr << "could not open default config file" << endl;
-      return -1;
+      fin.open(DEFAULT_JSON_PATH, ios::in);
+      if (!fin.is_open()) {
+        cerr << "could not open default config file" << endl;
+        return -1;
+      }
     }
     try {
       fin >> config;
@@ -250,11 +252,14 @@ int read_config(int argc, char** argv) {
   }
 
   {
-    ifstream fin("./conf/lang_spec.json");
+    ifstream fin(getexecpath() + LANG_SPEC_PATH);
 
     if (!fin.is_open()) {
-      cerr << "could not lang spec file" << endl;
-      return -1;
+      fin.open(LANG_SPEC_PATH, ios::in);
+      if (!fin.is_open()) {
+        cerr << "could not lang spec file" << endl;
+        return -1;
+      }
     }
     try {
       fin >> lang_spec;

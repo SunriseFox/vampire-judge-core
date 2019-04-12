@@ -23,6 +23,6 @@ int remove_folder(const string& path);
 int copy_file(const string& from, const string& dest);
 string readFile(const string& filename);
 string readFile(const string& filename, std::string::size_type count);
-string getexepath();
+string getexecpath();
 
 #endif // UTILS_H

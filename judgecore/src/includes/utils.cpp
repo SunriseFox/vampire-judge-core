@@ -83,9 +83,10 @@ string readFile(const string& filename, std::string::size_type count)
   return result;
 }
 
-string getexepath()
+string getexecpath()
 {
   char result[ PATH_MAX ];
   ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX );
-  return std::string( result, (count > 0) ? count : 0 );
+  string str = string( result, (count > 0) ? count : 0 );
+  return str.substr(0, str.find_last_of('/') + 1);
 }
