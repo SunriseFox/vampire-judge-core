@@ -1,0 +1,54 @@
+{
+  "debug": false,
+  "pid": null,
+  "sid": null,
+  "filename": ["main.", "$lang_ext"],
+  "lang": "c",
+  "variant": {
+    "compiler": "gcc",
+    "cargs": ["-DONLINE_JUDGE", "-lpthread", "-O2", "-static", "-std=c11", "-fno-asm", "-Wall", "-Wextra", "-o", "$exec", "$code"],
+    "cscript": [],
+    "executable": "$exec",
+    "eargs": []
+  },
+  "max_time": 1000,
+  "max_real_time": 2000,
+  "max_time_total": 30000,
+  "max_memory": 65530,
+  "max_output": 10000000,
+  "max_thread": 4,
+  "max_fd": 101,
+  "continue_on": ["accepted", "presentation error"],
+  "test_case_count": 1,
+  "spj_mode": "no",
+  "path": {
+    "base": "/mnt/core/testcase",
+    "code": ["$base", "code", "$pid", "$sid", "$filename"],
+    "log": ["$temp"],
+    "output": ["$base", "result", "$pid", "$sid"],
+    "stdin": ["$base", "case", "$pid"],
+    "stdout": ["$stdin"],
+    "temp": ["/tmp", ["judge-", "$pid", "-", "$sid"]],
+    "exec": ["$temp", "main"],
+    "spj": ["$base", "judge", "$pid"]
+  },
+  "spj": {
+    "code": ["$spj", ".", "$lang_ext"],
+    "target": "$spj"
+  },
+  "compiler": {
+    "max_time": 12000,
+    "max_real_time": 20000,
+    "max_memory": 204800,
+    "max_output": 52428800
+  },
+  "sys": {
+    "time_system_time": false,
+    "max_compiler_size": 5000,
+    "max_extra_size": 10240,
+    "max_fs_write_count": 20,
+    "max_inline_fs_count": 20,
+    "max_inline_fs_size": 1000,
+    "max_inline_stdout_size": 1000
+  }
+}

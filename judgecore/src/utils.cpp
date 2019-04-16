@@ -23,7 +23,7 @@ int create_folder(const string& path) {
   int pid = fork();
   if (pid == 0) {
 
-    execl("/usr/bin/mkdir", "/usr/bin/mkdir", "-p", path.c_str(), nullptr);
+    execl("/bin/mkdir", "/bin/mkdir", "-p", path.c_str(), nullptr);
     exit(1);
   }
   int status;
@@ -42,7 +42,7 @@ int create_folder(const string& path) {
 int remove_folder(const string& path) {
   int pid = fork();
   if (pid == 0) {
-    execl("/usr/bin/rm", "/usr/bin/rm", "-rf", path.c_str(), nullptr);
+    execl("/bin/rm", "/bin/rm", "-rf", path.c_str(), nullptr);
     exit(1);
   }
   int status = -1;
