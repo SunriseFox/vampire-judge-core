@@ -18,6 +18,7 @@
     "code": ["$base", "code", "$pid", "$sid", "$filename"],
     "log": ["$temp"],
     "output": ["$base", "result", "$pid", "$sid"],
+    "fs": ["$base", "fs", "$pid"],
     "stdin": ["$base", "case", "$pid"],
     "stdout": ["$stdin"],
     "temp": ["/tmp", ["judge-", "$pid", "-", "$sid"]],

@@ -18,6 +18,8 @@ profile/tracer
 testcase/judge/9002
 testcase/judge/9003
 
+testcase/result/
+
 # magic files
 judgecore/conf/*.json
 !judgecore/conf/default.json.sample

@@ -199,48 +199,57 @@ string getStatusText(RESULT what) {
   throw std::range_error("finish function should not return");
 }
 
+/* read_config
+ * read default config from conf/default.json
+ * - if you don't feel satisfied with its place
+ * - feel free to `ln -s` somewhere else 
+ * - there should be one
+ * read all suplied file as json and merge-patch them
+ * read language config from conf/lang-spec.json */
+
 int read_config(int argc, char** argv) {
   if (argc < 2) {
     cerr << "usage: judge [config.json [stdin]]" << endl;
     return -1;
   }
 
+  // read default json
   {
     ifstream fin(getexecpath() + DEFAULT_JSON_PATH);
     if (!fin.is_open()) {
       fin.open(DEFAULT_JSON_PATH, ios::in);
       if (!fin.is_open()) {
-        cerr << "could not open default config file" << endl;
-        return -1;
+        cerr << strwarn << "could not open default config file, likely an error" << endl;
       }
     }
     try {
       fin >> config;
     } catch(...) {
-      cerr << "failed to parse default config file" << endl;
+      cerr << strerr << "failed to parse default config file" << endl;
       return -1;
     }
   }
 
+  // merge args
   for (int i = 1; i < argc; i++) {
     json temp;
     if (strncmp(argv[i], "stdin", 5) == 0) {
       try {
         cin >> temp;
       } catch (...) {
-        cerr << "failed to parse json from stdin" << endl;
+        cerr << strerr << "failed to parse json from stdin" << endl;
         return -1;
       }
     } else {
       ifstream fin(argv[i]);
       if (!fin.is_open()) {
-        cerr << "could not open file '"<< argv[i] << "' (at argv " << i << ") for read" << endl;
+        cerr << strerr << "could not open file '"<< argv[i] << "' (at argv " << i << ") for read" << endl;
         return -1;
       }
       try {
         fin >> temp;
       } catch (...) {
-        cerr << "failed to parse json from file '"<< argv[i] << "' (at argv " << i << ")" << endl;
+        cerr << strerr << "failed to parse json from file '"<< argv[i] << "' (at argv " << i << ")" << endl;
         return -1;
       }
     }
@@ -253,20 +262,21 @@ int read_config(int argc, char** argv) {
     cout << setw(2) << config << endl;
   }
 
+  // read lang spec
   {
     ifstream fin(getexecpath() + LANG_SPEC_PATH);
 
     if (!fin.is_open()) {
       fin.open(LANG_SPEC_PATH, ios::in);
       if (!fin.is_open()) {
-        cerr << "could not lang spec file" << endl;
+        cerr << strerr << "could not lang spec file" << endl;
         return -1;
       }
     }
     try {
       fin >> lang_spec;
     } catch(...) {
-      cerr << "failed to parse lang spec file" << endl;
+      cerr << strerr << "failed to parse lang spec file" << endl;
       return -1;
     }
   }
@@ -275,9 +285,8 @@ int read_config(int argc, char** argv) {
 }
 
 [[noreturn]] void validation_error(const string& error) {
-  cerr << "caught json error while validating: " << endl;
+  cerr << strerr << "while validating configuration, caught" << endl;
   cerr << error << endl;
-  cerr << "It is likely related to the default configuration" << endl;
   exit(253);
 }
 
@@ -294,7 +303,7 @@ string merge_array(json& root, json& current, json& array, const string& delim =
       else if (root.count(str.substr(1)))
         array = str = merge_array(root, current, root[str.substr(1)], string(), depth + 1);
       else {
-        cerr << "[warn] undefined reference " << str << endl;
+        cerr << strwarn << "undefined reference " << str << endl;
       }
     }
     return str;
@@ -323,6 +332,9 @@ string merge_array(json& root, json& current, json& array, const string& delim =
   return array.get<string>();
 }
 
+/* validate_config
+ * validate configuration and join array */
+
 int validate_config() {
   int error = 0;
 
@@ -336,8 +348,7 @@ int validate_config() {
     try {
       merge_array(config, config["path"], config["path"][key], "/");
     } catch (const std::range_error& e) {
-      cerr << "while retriving key " << key << "(" << config["path"][key] << ")"  << endl;
-      cerr << "caught " << e.what() << endl;
+      cerr << strerr << "while retriving key " << key << "(" << config["path"][key] << ")"  << endl;
       validation_error(e.what());
     }
   };
@@ -360,7 +371,7 @@ int validate_config() {
     }
   }
   if (language.is_null()) {
-    cerr << "unknown language" << config["lang"] << endl;
+    cerr << strerr << "unknown language" << config["lang"] << endl;
     error = 1;
   } else {
     config["lang_name"] = language["name"];
@@ -373,13 +384,14 @@ int validate_config() {
   merge_path("output");
   merge_path("stdin");
   merge_path("stdout");
+  merge_path("fs");
   merge_path("log");
   merge_path("code");
   merge_path("exec");
 
   auto expect_int = [&error](const string& key) -> void {
     if (!config[key].is_number_integer() || config[key].get<int>() < 0) {
-      cerr << key << " is not an integer" << endl;
+      cerr << stderr << key << " is not an integer" << endl;
       error = 1;
     }
   };
@@ -495,7 +507,7 @@ int compile_general(std::vector<const char*> args) {
 
   pid_t pid = fork();
   if(pid == -1) {
-    cerr << "fork complier process failed" << endl;
+    cerr << strerr << "fork complier process failed" << endl;
     result["compiler"] = "fork complier process failed";
     finish(CE);
   }
@@ -506,14 +518,14 @@ int compile_general(std::vector<const char*> args) {
     dup2(fd, STDERR_FILENO);
     set_resource_limit(compiler.max_time, compiler.max_memory, compiler.max_output);
     if (setpgid(0, 0)) {
-      cerr << "set pgid failed!" << endl;
+      cerr << strerr << "set pgid failed!" << endl;
     };
     if(setegid(99)) {
-      cerr << "set egid failed!" << endl;
+      cerr << strerr << "set egid failed!" << endl;
       raise(SIGSYS);
     }
     if(seteuid(99)) {
-      cerr << "set euid failed!" << endl;
+      cerr << strerr << "set euid failed!" << endl;
       raise(SIGSYS);
     }
     if (execvp(args[0], const_cast<char**>(&args[0])))
@@ -538,7 +550,8 @@ int compile_general(std::vector<const char*> args) {
 
   string compile_info = readFile(path["cmpinfo"], sys.max_compiler_size);
   if(!WIFEXITED(status)) {
-    compile_info += "\ncompiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
+    if (compile_info.size()) compile_info += "\n";
+    compile_info += "compiler process killed by sig " + string(strsignal(WTERMSIG(status))) + "\n";
     status = WTERMSIG(status);
   } else {
     status = WEXITSTATUS(status);
@@ -1084,6 +1097,27 @@ RESULT do_compare(const map<string, string>& extra) {
   return SW;
 }
 
+RESULT do_fs_compare(const map<string, string>& extra, const string& fsname) {
+  string difcmd = string("diff --strip-trailing-cr --brief ") + extra.at("fsout") + " " + fscheck + " >>" + extra.at("log");
+  if (debug)
+    cout << "diff: " << difcmd << endl;
+  int status = system(difcmd.c_str());
+
+  if (WEXITSTATUS(status) == 0)
+    return AC;
+
+  difcmd = string("diff --ignore-space-change --ignore-all-space --ignore-blank-lines --ignore-case --brief ") + extra.at("fsout") + " " + extra.at("output") + " >" + extra.at("log");
+
+  if (debug)
+    cout << "diff2: " << difcmd << endl;
+
+  status = system(difcmd.c_str());
+
+  if (WEXITSTATUS(status) == 0)
+    return PE;
+  return WA;
+}
+
 [[ noreturn ]] void do_test() {
   int time_limit = config["max_time"].get<int>();
   int real_time_limit = config["max_real_time"].get<int>() / 1000 + 1;
@@ -1136,6 +1170,8 @@ RESULT do_compare(const map<string, string>& extra) {
       extra["stdin"] = path["stdin"] + "/" + cs + ".in";
       extra["stdout"] = path["stdout"] + "/" + cs + ".out";
       extra["output"] = path["output"] + "/" + cs + ".execout";
+      extra["fsin"] = path.at("temp") + "/inline-" + cs + ".out";
+      extra["fsout"] = path.at("temp") + "/inline-" + cs + ".out";
     }
 
     if(config["inline"].is_array() && config["inline"].size() >= static_cast<json::size_type>(c)) {
@@ -1518,6 +1554,10 @@ int preprocess() {
   path["stdin"] = config["path"]["stdin"].get<string>();
   path["stdout"] = config["path"]["stdout"].get<string>();
 
+  path["fs"] = config["path"]["fs"].get<string>();
+  path["fsin"] = path["fs"] + "/in";
+  path["fsout"] = path["fs"] + "/out";
+
   path["log"] = config["path"]["log"].get<string>();
 
   // Files
@@ -1595,12 +1635,18 @@ int preprocess() {
     }
   }
   if (debug)
-    cout << "preprocessed ok." << endl;
+    cout << "preprocessed ok" << endl;
   return 0;
 }
 
+/* syscall_name.hpp 
+ * generated syscall number->name map
+ * used by debugging syscall */
 #include "syscall_name.hpp"
 
+
+/* function main 
+ * overall entrance and error handler*/
 int main (int argc, char** argv) try {
   initialize(syscall_name);
 
@@ -1608,7 +1654,7 @@ int main (int argc, char** argv) try {
     exit(255);
   }
 
-  // compile source or check syntax, this function won't fail(?)
+  // compile source or check syntax, this function won't fail
   generate_exec_args();
 
   // do test

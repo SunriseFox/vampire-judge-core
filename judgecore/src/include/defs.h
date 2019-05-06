@@ -26,4 +26,7 @@ struct CONFIG_SYS {
   long max_inline_stdout_size = 1000;
 };
 
+const char* strerr = "[error] ";
+const char* strwarn = "[warn] ";
+
 #endif
